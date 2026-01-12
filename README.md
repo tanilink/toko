@@ -1,10 +1,3 @@
-Tentu, ini adalah draft **README.md** yang profesional, terstruktur, dan menggunakan ikon agar menarik. Dokumen ini dirancang untuk memberikan kesan "Enterprise Grade" sesuai dengan kualitas skrip v4.5 yang telah kita bangun.
-
-Saya memilih **Lisensi MIT** karena ini adalah standar industri yang aman, sederhana, dan cocok untuk proyek skrip manajemen seperti ini (memperbolehkan penggunaan pribadi maupun komersial, tapi membebaskan Anda dari tuntutan hukum/garansi).
-
-Silakan copy kode di bawah ini dan buat file bernama `README.md` di repository GitHub Anda.
-
----
 
 ```markdown
 # 🚀 KasirLite Remote v4.5 (Enterprise Edition)
