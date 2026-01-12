@@ -1,10 +1,7 @@
-
 ```markdown
 # 🚀 KasirLite Remote v4.5 (Enterprise Edition)
 
-![Version](https://img.shields.io/badge/version-v4.5-blue?style=flat-square)
-![Stability](https://img.shields.io/badge/stability-stable-success?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)
+![Version](https://img.shields.io/badge/version-v4.5-blue?style=flat-square) ![Stability](https://img.shields.io/badge/stability-stable-success?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square) [![WhatsApp](https://img.shields.io/badge/WhatsApp-Chat_Admin-25D366?style=flat-square&logo=whatsapp)](https://wa.me/6281775700114)
 
 **KasirLite Remote** adalah sistem manajemen armada (*Fleet Management*) berbasis Termux untuk perangkat POS (Point of Sales) Android. Sistem ini memungkinkan pemilik bisnis untuk memantau, mengamankan, dan mengelola ratusan cabang toko secara terpusat melalui **Telegram Bot**, tanpa memerlukan server VPS dedicated.
 
@@ -97,6 +94,14 @@ Sistem akan membuat folder tersembunyi di home directory:
 └── service_bot.sh   # Logic utama Bot (Daemon)
 
 ```
+
+---
+
+## 📞 Kontak & Support
+
+Jika mengalami kendala teknis atau membutuhkan bantuan instalasi kustom, silakan hubungi pengembang:
+
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-+6281775700117_(masansor)-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/6281775700117)
 
 ---
 
