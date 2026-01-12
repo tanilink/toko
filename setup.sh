@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🚀 KASIRLITE REMOTE v3.0 - FINAL PRODUCTION
-# Fitur: OTA Provisioning, WakeLock, Remote Bot, Auto-Backup
+# 🚀 KASIRLITE REMOTE v3.2 - ZIP BACKUP EDITION
+# Fitur: OTA Provisioning + Full Folder Backup (ZIP)
 # ==========================================================
 
 # --- [BAGIAN ADMIN: ISI INI DULU] ---
@@ -15,53 +15,48 @@ MANAGER_FILE="$DIR_UTAMA/manager.sh"
 SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
 
 # ==========================================================
-# 1. PERSIAPAN SISTEM & DEPENDENSI
+# 1. PERSIAPAN SISTEM
 # ==========================================================
 clear
-echo "⚙️  MEMULAI INSTALASI SISTEM..."
+echo "⚙️  MENYIAPKAN SISTEM..."
 
-# A. Wake Lock (Anti Tidur)
+# A. Wake Lock
 termux-wake-lock
-echo "✅ Wake Lock Aktif"
 
-# B. Install Paket
-echo "📦 Cek Dependensi..."
+# B. Install Paket (TAMBAHAN: ZIP)
 pkg update -y >/dev/null 2>&1
-for pkg in cloudflared curl jq termux-api netcat-openbsd; do
+# Tambahkan 'zip' ke dalam daftar instalasi
+for pkg in cloudflared curl jq termux-api netcat-openbsd zip; do
     if ! command -v $pkg &> /dev/null; then
-        echo "   - Menginstall $pkg..."
         pkg install -y $pkg >/dev/null 2>&1
     fi
 done
 
-# C. Validasi Izin Storage (PENTING!)
-echo "📂 Cek Izin Penyimpanan..."
+# C. Validasi Izin Storage (WAJIB)
 TEST_FILE="/storage/emulated/0/test_perm"
 touch "$TEST_FILE" 2>/dev/null
 if [ ! -f "$TEST_FILE" ]; then
     echo "⚠️  IZIN PENYIMPANAN DIPERLUKAN!"
-    echo "👉 Silakan pilih 'IZINKAN' / 'ALLOW' pada pop-up..."
+    echo "👉 Silakan pilih 'IZINKAN' pada pop-up..."
     termux-setup-storage
     sleep 3
-    # Cek ulang
     touch "$TEST_FILE" 2>/dev/null
     if [ ! -f "$TEST_FILE" ]; then
-        echo "❌ GAGAL: Izin ditolak. Instalasi dibatalkan."
+        echo "❌ GAGAL: Izin ditolak."
         exit 1
     fi
 fi
 rm "$TEST_FILE" 2>/dev/null
-echo "✅ Izin Penyimpanan OK"
 
 mkdir -p "$DIR_UTAMA"
 
 # ==========================================================
-# 2. OTA PROVISIONING (MINTA TOKEN KE ADMIN)
+# 2. OTA PROVISIONING (ADMIN FULL CONTROL)
 # ==========================================================
 UNIT_CODE=$(tr -dc A-Z0-9 </dev/urandom | head -c 4)
 
-echo "📡 MENGHUBUNGI SERVER PUSAT..."
-PESAN="🔔 <b>PERMINTAAN AKTIVASI BARU!</b>%0A%0A📱 Kode Unit: <code>$UNIT_CODE</code>%0A📅 Waktu: $(date)%0A%0A👉 Admin, balas dengan:%0A<code>/deploy $UNIT_CODE [TOKEN_CLOUDFLARE]</code>"
+echo "📡 MENGHUBUNGI ADMIN..."
+PESAN="🔔 <b>PERMINTAAN AKTIVASI!</b>%0A%0A📱 Kode Unit: <code>$UNIT_CODE</code>%0A📅 $(date)%0A%0A👉 Admin, balas:%0A<code>/deploy $UNIT_CODE [TOKEN] [NAMA_TOKO]</code>"
 
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
     -d chat_id="$CHAT_ID" \
@@ -69,12 +64,14 @@ curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
     -d parse_mode="HTML" >/dev/null
 
 echo "========================================="
-echo "   ⏳ MENUNGGU AKTIVASI ADMIN..."
+echo "   ⏳ MENUNGGU KONFIGURASI ADMIN..."
 echo "   📱 KODE UNIT: $UNIT_CODE"
 echo "========================================="
+echo "   Mohon jangan tutup aplikasi..."
 
 OFFSET=0
 TOKEN_DITERIMA=""
+NAMA_DITERIMA=""
 
 while true; do
     RESPONSE=$(curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))&timeout=10")
@@ -84,25 +81,31 @@ while true; do
     LAST_TEXT=$(echo "$RESPONSE" | jq -r '.result[-1].message.text // empty')
 
     if [[ "$LAST_TEXT" == "/deploy $UNIT_CODE"* ]]; then
-        echo -e "\n✅ TOKEN DITERIMA!"
+        echo -e "\n✅ DATA DITERIMA DARI ADMIN!"
         TOKEN_DITERIMA=$(echo "$LAST_TEXT" | awk '{print $3}')
-        if [ ${#TOKEN_DITERIMA} -gt 20 ]; then break; fi
+        NAMA_DITERIMA=$(echo "$LAST_TEXT" | awk '{print $4}')
+        
+        if [ ${#TOKEN_DITERIMA} -gt 20 ]; then
+            if [ -z "$NAMA_DITERIMA" ]; then NAMA_DITERIMA="Cabang-$UNIT_CODE"; fi
+            break
+        else
+            echo "❌ Token Admin salah, menunggu revisi..."
+        fi
     fi
     sleep 2
 done
 
-echo "💾 Menyimpan Konfigurasi..."
-read -p "Masukkan Nama Cabang ini (ex: Roxy): " NAMA_CABANG
+echo "💾 Mengkonfigurasi $NAMA_DITERIMA..."
 
 cat <<EOF > "$CONFIG_FILE"
-NAMA_TOKO="$NAMA_CABANG"
+NAMA_TOKO="$NAMA_DITERIMA"
 TUNNEL_TOKEN="$TOKEN_DITERIMA"
 BOT_TOKEN="$BOT_TOKEN"
 CHAT_ID="$CHAT_ID"
 EOF
 
 # ==========================================================
-# 3. BUAT SERVICE BOT (LISTENER & AUTO BACKUP)
+# 3. BUAT SERVICE BOT (ZIP BACKUP LOGIC)
 # ==========================================================
 cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
@@ -111,14 +114,36 @@ DB_PATH="/storage/emulated/0/KasirToko/database"
 OFFSET=0
 COUNTER=0
 
-# Kirim Notif Online Saat Startup
+# Fungsi Backup ZIP Reusable
+kirim_backup_zip() {
+    local TYPE=$1
+    local TIMESTAMP=$(date +%Y%m%d-%H%M)
+    local ZIP_NAME="Backup_${NAMA_TOKO}_${TIMESTAMP}.zip"
+    local ZIP_FULL_PATH="$HOME/$ZIP_NAME"
+
+    if [ -d "$DB_PATH" ]; then
+        # Masuk folder dulu agar zip tidak membawa path panjang
+        cd "$DB_PATH" && zip -r "$ZIP_FULL_PATH" . >/dev/null 2>&1
+        
+        if [ -f "$ZIP_FULL_PATH" ]; then
+            curl -s -F chat_id="$CHAT_ID" -F document=@"$ZIP_FULL_PATH" \
+            -F caption="📦 $TYPE: $NAMA_TOKO" \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
+            
+            # Hapus file zip setelah kirim (hemat storage)
+            rm -f "$ZIP_FULL_PATH"
+        fi
+    fi
+}
+
+# Notif Startup
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
     -d chat_id="$CHAT_ID" \
-    -d text="✅ <b>$NAMA_TOKO ONLINE!</b>%0A🚀 Sistem Siap.%0ACoba ketik: /status atau /backup" \
+    -d text="✅ <b>$NAMA_TOKO ONLINE!</b>%0A🚀 Sistem Siap Pakai." \
     -d parse_mode="HTML" >/dev/null
 
 while true; do
-    # A. Cek Telegram Command (Setiap 5 detik)
+    # A. Cek Remote Command
     UPDATES=$(curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
     NEW_OFFSET=$(echo "$UPDATES" | jq -r '.result[-1].update_id // empty')
     
@@ -126,41 +151,30 @@ while true; do
         OFFSET=$NEW_OFFSET
         MSG=$(echo "$UPDATES" | jq -r '.result[-1].message.text // empty')
         
-        # 1. Perintah /status
         if [[ "$MSG" == "/status"* ]]; then
             if pgrep -f cloudflared >/dev/null; then CF="✅ ON"; else CF="❌ OFF"; fi
             curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-                -d chat_id="$CHAT_ID" -d text="📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A🔋 Battery: $(termux-battery-status | jq .percentage)%%" -d parse_mode="HTML" >/dev/null
+                -d chat_id="$CHAT_ID" -d text="📊 Status $NAMA_TOKO: Tunnel $CF | Bat $(termux-battery-status | jq .percentage)%" >/dev/null
         fi
 
-        # 2. Perintah /backup
         if [[ "$MSG" == "/backup"* ]]; then
-            LATEST=$(ls -t "$DB_PATH"/*.db 2>/dev/null | head -n 1)
-            if [ -f "$LATEST" ]; then
-                curl -s -F chat_id="$CHAT_ID" -F document=@"$LATEST" -F caption="📦 Backup Manual: $NAMA_TOKO" "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
-            else
-                curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="❌ Database tidak ditemukan." >/dev/null
-            fi
+            kirim_backup_zip "Remote Backup (ZIP)"
         fi
     fi
 
-    # B. Auto Backup (Setiap 6 Jam = 4320 x 5 detik)
+    # B. Auto Backup (6 Jam)
     COUNTER=$((COUNTER + 1))
     if [ $COUNTER -ge 4320 ]; then
-        LATEST=$(ls -t "$DB_PATH"/*.db 2>/dev/null | head -n 1)
-        if [ -f "$LATEST" ]; then
-            curl -s -F chat_id="$CHAT_ID" -F document=@"$LATEST" -F caption="📦 Auto Backup (6 Jam): $NAMA_TOKO" "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
-        fi
+        kirim_backup_zip "Auto Backup 6 Jam (ZIP)"
         COUNTER=0
     fi
-
     sleep 5
 done
 EOF
 chmod +x "$SERVICE_FILE"
 
 # ==========================================================
-# 4. BUAT MANAGER SCRIPT (MENU LOKAL)
+# 4. BUAT MANAGER SCRIPT (MENU LOKAL JUGA PAKAI ZIP)
 # ==========================================================
 cat << 'EOF' > "$MANAGER_FILE"
 #!/bin/bash
@@ -170,48 +184,47 @@ SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
 
 jalankan_layanan() {
     source "$CONFIG_FILE"
-    echo "🚀 Menyalakan Service $NAMA_TOKO..."
+    echo "🚀 Menyalakan $NAMA_TOKO..."
     termux-wake-lock
-    
-    # Anti-Double Session (Kill All)
     pkill -f "cloudflared"
     pkill -f "service_bot.sh"
     
-    # Start Tunnel
     if [ -n "$TUNNEL_TOKEN" ]; then
         nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
         echo "✅ Cloudflare Tunnel: AKTIF"
     fi
-    
-    # Start Bot Listener
     nohup bash "$SERVICE_FILE" >/dev/null 2>&1 &
-    echo "✅ Bot Listener: AKTIF"
+    echo "✅ Bot Service: AKTIF"
 }
 
 tampilkan_menu() {
     source "$CONFIG_FILE"
     clear
-    echo "=== KASIRLITE PRO: $NAMA_TOKO ==="
-    echo "1. Cek Status (Tunnel & Port)"
-    echo "2. Backup Database Manual"
-    echo "3. Restart / Refresh Service"
-    echo "4. Ganti Token Tunnel"
+    echo "=== KASIRLITE: $NAMA_TOKO ==="
+    echo "1. Cek Status"
+    echo "2. Backup Database (ZIP)"
+    echo "3. Refresh Sistem"
     echo "0. Keluar"
     read -p "Pilih: " PIL
     case $PIL in
-        1) 
-           echo "--- CLOUDFLARE ---"
-           if pgrep -f cloudflared >/dev/null; then echo "✅ BERJALAN"; else echo "❌ MATI"; fi
-           echo "--- WEB KASIR ---"
-           curl -I http://127.0.0.1:7575
-           read -p "Enter..." ;;
+        1) curl -I http://127.0.0.1:7575; read -p "Enter..." ;;
         2) 
-           echo "📦 Mengirim Backup..."
-           LATEST=$(ls -t "/storage/emulated/0/KasirToko/database"/*.db 2>/dev/null | head -n 1)
-           curl -s -F chat_id="$CHAT_ID" -F document=@"$LATEST" -F caption="📦 Manual Backup (Menu): $NAMA_TOKO" "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
-           echo "✅ Terkirim!"; read -p "Enter..." ;;
+           echo "📦 Mengompres & Mengirim ZIP..."
+           # Logika ZIP Manual
+           DB_PATH="/storage/emulated/0/KasirToko/database"
+           ZIP_NAME="ManualBackup_${NAMA_TOKO}.zip"
+           if [ -d "$DB_PATH" ]; then
+               cd "$DB_PATH" && zip -r "$HOME/$ZIP_NAME" . >/dev/null 2>&1
+               curl -s -F chat_id="$CHAT_ID" -F document=@"$HOME/$ZIP_NAME" \
+               -F caption="📦 Manual Backup (Menu): $NAMA_TOKO" \
+               "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
+               rm -f "$HOME/$ZIP_NAME"
+               echo "✅ Terkirim!"
+           else
+               echo "❌ Folder database tidak ditemukan!"
+           fi
+           read -p "Enter..." ;;
         3) jalankan_layanan; sleep 2 ;;
-        4) nano "$CONFIG_FILE"; echo "Restart layanan (Menu 3) setelah edit."; read -p "Enter..." ;;
         0) exit ;;
     esac
 }
@@ -221,15 +234,12 @@ EOF
 chmod +x "$MANAGER_FILE"
 
 # ==========================================================
-# 5. PASANG SHORTCUT & FINISHING
+# 5. FINISHING
 # ==========================================================
 sed -i '/alias nyala=/d' ~/.bashrc
 sed -i '/alias menu=/d' ~/.bashrc
-sed -i '/alias cek=/d' ~/.bashrc
 echo "alias menu='bash $DIR_UTAMA/manager.sh'" >> ~/.bashrc
 echo "alias nyala='bash $DIR_UTAMA/manager.sh start'" >> ~/.bashrc
-echo "alias cek='pgrep -a cloudflared'" >> ~/.bashrc
 
 echo "✅ INSTALASI SELESAI!"
-# Jalankan service pertama kali secara otomatis
 bash "$MANAGER_FILE" start
