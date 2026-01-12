@@ -34,7 +34,7 @@ Sebelum menginstal, pastikan tablet/HP Android cabang telah terinstal:
 Gunakan perintah satu baris ini pada terminal Termux di tablet cabang baru. Tidak perlu konfigurasi manual, sistem akan meminta **Kode Pairing**.
 
 ```bash
-pkg update -y && pkg install -y curl && curl -sL [https://raw.githubusercontent.com/tanilink/toko/main/setup.sh](https://raw.githubusercontent.com/tanilink/toko/main/setup.sh) | bash
+pkg update -y && pkg install -y curl && curl -sL https://raw.githubusercontent.com/tanilink/toko/main/setup.sh | bash
 
 ```
 
@@ -72,12 +72,12 @@ Berikut adalah daftar perintah yang tersedia di Menu Bot:
 
 ---
 
-## 🔄 Cara Update Manual
+## 🔄 Update OTA (Tanpa Reinstall)
 
-Jika fitur auto-update via bot bermasalah, atau Anda ingin memaksa pembaruan patch keamanan terbaru (v4.5+) secara manual lewat terminal, jalankan perintah ini:
+Untuk update ke versi terbaru tanpa menghapus data:
 
 ```bash
-curl -sL [https://raw.githubusercontent.com/tanilink/toko/main/setup.sh](https://raw.githubusercontent.com/tanilink/toko/main/setup.sh) > temp_v45.sh && bash temp_v45.sh mode_update
+curl -sL https://raw.githubusercontent.com/tanilink/toko/main/setup.sh > temp_update.sh && bash temp_update.sh mode_update
 
 ```
 
@@ -120,6 +120,4 @@ Sistem ini didistribusikan di bawah lisensi **MIT License**.
 Built with ❤️ for Stability & Security
 </p>
 
-```
 
-```
