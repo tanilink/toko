@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.5.2 - SYNTAX FIXED
-# Fix: Removed illegal semicolon after background operator
+# 🛡️ KASIRLITE REMOTE v4.6 - LITE SWITCH
+# Fitur: No Termux:API, ON/OFF Switch (Persistent), Ultra Lite
 # ==========================================================
 
 # --- [BAGIAN ADMIN] ---
@@ -14,15 +14,19 @@ DIR_UTAMA="$HOME/.kasirlite"
 CONFIG_FILE="$DIR_UTAMA/config.conf"
 MANAGER_FILE="$DIR_UTAMA/manager.sh"
 SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
+FLAG_TUTUP="$DIR_UTAMA/.toko_tutup" # Penanda status toko
 
 update_system_files() {
-    echo "🛡️ Menerapkan Patch v4.5.2 (Syntax Fix)..."
+    echo "🛡️ Menerapkan Patch v4.6 (Lite Switch)..."
 
-    # 1. SERVICE BOT (SAMA SEPERTI SEBELUMNYA)
+    # ==========================================
+    # 1. SERVICE BOT (LOGIKA BARU ON/OFF)
+    # ==========================================
     cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
 source "$HOME/.kasirlite/config.conf"
 DB_PATH="/storage/emulated/0/KasirToko/database"
+FLAG_TUTUP="$HOME/.kasirlite/.toko_tutup"
 OFFSET=0
 COUNTER=0
 
@@ -45,10 +49,11 @@ kirim_backup_zip() {
     fi
 }
 
+# Update Menu Tombol (Tanpa /msg)
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/setMyCommands" \
-    -d "commands=[{\"command\":\"status\", \"description\":\"📊 Cek Status\"},{\"command\":\"backup\", \"description\":\"📦 Backup DB\"},{\"command\":\"msg\", \"description\":\"💬 Kirim Info\"},{\"command\":\"cek\", \"description\":\"🔍 Safe Check\"},{\"command\":\"update\", \"description\":\"⬇️ Update\"}]" >/dev/null
+    -d "commands=[{\"command\":\"status\", \"description\":\"📊 Cek Status\"},{\"command\":\"open\", \"description\":\"🟢 Buka Toko\"},{\"command\":\"close\", \"description\":\"🔴 Tutup Toko\"},{\"command\":\"backup\", \"description\":\"📦 Backup DB\"},{\"command\":\"cek\", \"description\":\"🔍 Cek Terminal\"}]" >/dev/null
 
-kirim_pesan "✅ <b>$NAMA_TOKO ONLINE (v4.5.2)</b>%0A🔧 Manager Script Fixed."
+kirim_pesan "✅ <b>$NAMA_TOKO ONLINE (v4.6 Lite)</b>%0ATanpa Bloatware. Siap Perintah!"
 
 while true; do
     RAW_UPDATES=$(curl -s -m 10 "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
@@ -58,53 +63,85 @@ while true; do
         
         if [ ! -z "$PARSED_DATA" ]; then
             while IFS='|' read -r UPDATE_ID SENDER_ID MSG_TEXT; do
+                
+                # --- A. STATUS ---
                 if [[ "$MSG_TEXT" == "/status"* ]]; then
-                    if pgrep -f cloudflared >/dev/null; then CF="✅ ON"; else CF="❌ OFF"; fi
-                    kirim_pesan "📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A🛡️ System: v4.5.2"
+                    if pgrep -f cloudflared >/dev/null; then CF="✅ ON (Online)"; else CF="❌ OFF (Offline)"; fi
+                    
+                    # Cek apakah sedang mode TUTUP manual
+                    if [ -f "$FLAG_TUTUP" ]; then MODE="🔴 SEDANG DITUTUP (Manual)"; else MODE="🟢 SEDANG DIBUKA"; fi
+                    
+                    kirim_pesan "📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A🔐 Mode: $MODE%0A🛡️ Versi: v4.6 Lite"
                 fi
+
+                # --- B. BACKUP ---
                 if [[ "$MSG_TEXT" == "/backup"* ]]; then kirim_backup_zip "Remote Backup"; fi
-                if [[ "$MSG_TEXT" == "/msg"* ]]; then
-                    ISI=$(echo "$MSG_TEXT" | sed 's/\/msg //')
-                    termux-notification --title "INFO PUSAT" --content "$ISI" --priority high >/dev/null 2>&1
-                    kirim_pesan "✅ Notifikasi Terkirim."
+
+                # --- C. ADMIN ONLY ---
+                
+                # 1. CLOSE (Matikan Akses Internet)
+                if [[ "$MSG_TEXT" == "/close"* ]]; then
+                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
+                    touch "$FLAG_TUTUP" # Buat penanda file
+                    pkill -f cloudflared
+                    kirim_pesan "🔴 <b>TOKO DITUTUP!</b>%0AAkses internet dimatikan permanen (sampai di-Open)."
                 fi
+
+                # 2. OPEN (Nyalakan Akses Internet)
+                if [[ "$MSG_TEXT" == "/open"* ]]; then
+                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
+                    if [ -f "$FLAG_TUTUP" ]; then rm "$FLAG_TUTUP"; fi # Hapus penanda
+                    
+                    # Nyalakan ulang via Manager agar rapi
+                    bash "$HOME/.kasirlite/manager.sh" restart_remote &
+                    kirim_pesan "🟢 <b>TOKO DIBUKA!</b>%0AMenyalakan kembali tunnel..."
+                fi
+
+                # 3. CEK (Safe Shell)
                 if [[ "$MSG_TEXT" == "/cek"* ]]; then
-                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then kirim_pesan "⛔ <b>AKSES DITOLAK!</b>"; continue; fi
+                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then kirim_pesan "⛔ Ditolak."; continue; fi
                     CMD_SHELL=$(echo "$MSG_TEXT" | sed 's/\/cek //')
                     if [[ "$CMD_SHELL" == *"rm "* ]] || [[ "$CMD_SHELL" == *"mv "* ]] || \
                        [[ "$CMD_SHELL" == *"reboot"* ]] || [[ "$CMD_SHELL" == *">"* ]] || \
                        [[ "$CMD_SHELL" == *";"* ]] || [[ "$CMD_SHELL" == *"|"* ]]; then
-                        kirim_pesan "⚠️ <b>BLOKIR KEAMANAN:</b> Ditolak."; continue
+                        kirim_pesan "⚠️ Command Dangerous."; continue
                     fi
                     kirim_pesan "🔍 Cek: <code>$CMD_SHELL</code>"
                     HASIL=$(timeout 5s bash -c "$CMD_SHELL" 2>&1 | head -c 2000)
-                    if [ -z "$HASIL" ]; then HASIL="(Kosong/Selesai)"; fi
+                    if [ -z "$HASIL" ]; then HASIL="(Kosong)"; fi
                     kirim_pesan "<pre>$HASIL</pre>"
                 fi
+
+                # 4. SET TUNNEL
                 if [[ "$MSG_TEXT" == "/set_tunnel"* ]]; then
                     if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
                     TOKEN_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
-                    if [ ${#TOKEN_BARU} -lt 30 ]; then kirim_pesan "❌ Token pendek!"; continue; fi
-                    kirim_pesan "🔄 <b>TESTING TOKEN...</b>"
+                    if [ ${#TOKEN_BARU} -lt 30 ]; then kirim_pesan "❌ Token Invalid"; continue; fi
+                    kirim_pesan "🔄 Ganti Tunnel..."
                     TOKEN_LAMA=$(grep "TUNNEL_TOKEN=" "$CONFIG_FILE" | cut -d'"' -f2)
                     sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=\"$TOKEN_BARU\"|" "$CONFIG_FILE"
-                    pkill -f cloudflared
-                    nohup cloudflared tunnel run --token "$TOKEN_BARU" >/dev/null 2>&1 &
+                    
+                    # Paksa restart manager
+                    bash "$HOME/.kasirlite/manager.sh" restart_remote &
+                    
                     sleep 15
                     if pgrep -f cloudflared >/dev/null; then
-                        kirim_pesan "✅ <b>SUKSES!</b>"
+                        kirim_pesan "✅ Sukses Ganti Domain."
                     else
-                        kirim_pesan "⚠️ <b>GAGAL!</b> Revert..."
+                        kirim_pesan "⚠️ Gagal! Revert..."
                         sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=\"$TOKEN_LAMA\"|" "$CONFIG_FILE"
-                        nohup cloudflared tunnel run --token "$TOKEN_LAMA" >/dev/null 2>&1 &
+                        bash "$HOME/.kasirlite/manager.sh" restart_remote &
                     fi
                 fi
+
+                # 5. UPDATE
                 if [[ "$MSG_TEXT" == "/update"* ]]; then
                      if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
-                     kirim_pesan "⬇️ Update v4.5.2..."
+                     kirim_pesan "⬇️ Update v4.6..."
                      curl -sL "$GITHUB_URL" > "$HOME/update_temp.sh"
                      bash "$HOME/update_temp.sh" mode_update
                 fi
+
                 OFFSET=$UPDATE_ID
             done <<< "$PARSED_DATA"
         fi
@@ -116,38 +153,50 @@ done
 EOF
     chmod +x "$SERVICE_FILE"
 
-    # 2. MANAGER SCRIPT (YANG DIPERBAIKI)
+    # ==========================================
+    # 2. MANAGER SCRIPT (PERSISTENT LOGIC)
+    # ==========================================
     cat << 'EOF' > "$MANAGER_FILE"
 #!/bin/bash
 DIR_UTAMA="$HOME/.kasirlite"
 CONFIG_FILE="$DIR_UTAMA/config.conf"
 SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
+FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 jalankan_layanan() {
     source "$CONFIG_FILE"
-    echo "🚀 Menyalakan $NAMA_TOKO..."
+    echo "🚀 Menyalakan $NAMA_TOKO (v4.6 Lite)..."
     termux-wake-lock
     pkill -f "cloudflared"
     pkill -f "service_bot.sh"
     
-    # --- PERBAIKAN SYNTAX DI SINI (HAPUS TITIK KOMA) ---
-    if [ -n "$TUNNEL_TOKEN" ]; then 
-        nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
+    # --- LOGIKA PERSISTENT ON/OFF ---
+    if [ -f "$FLAG_TUTUP" ]; then
+        echo "🔒 STATUS: TOKO DITUTUP (TUNNEL OFF)."
+        # Jangan nyalakan Cloudflared jika ada flag tutup
+    else
+        if [ -n "$TUNNEL_TOKEN" ]; then 
+            nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
+            echo "☁️ Tunnel: AKTIF"
+        fi
     fi
-    # ---------------------------------------------------
+    # -------------------------------
     
+    # Bot selalu nyala agar bisa terima perintah /open
     nohup bash "$SERVICE_FILE" >/dev/null 2>&1 &
-    echo "✅ Service Started."
+    echo "✅ Bot Service Started."
 }
 
 tampilkan_menu() {
     source "$CONFIG_FILE"
     while true; do
         clear
-        echo "=== KASIRLITE v4.5.2: $NAMA_TOKO ==="
-        echo "1. Cek Status"
-        echo "2. Kirim Backup"
-        echo "3. Restart Service"
+        echo "=== KASIRLITE v4.6 LITE: $NAMA_TOKO ==="
+        if [ -f "$FLAG_TUTUP" ]; then echo "[ STATUS: 🔴 CLOSED / TUTUP ]"; else echo "[ STATUS: 🟢 OPEN / BUKA ]"; fi
+        echo "--------------------------------"
+        echo "1. Cek Status Web Local"
+        echo "2. Kirim Backup Manual"
+        echo "3. Refresh Service"
         echo "0. Keluar"
         read -p "Pilih: " PIL
         case $PIL in
@@ -163,24 +212,25 @@ EOF
     chmod +x "$MANAGER_FILE"
 }
 
-# --- LOGIKA UTAMA ---
+# --- LOGIKA UTAMA (LITE: NO TERMUX API INSTALL) ---
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
     if ! grep -q "ADMIN_ID" "$CONFIG_FILE"; then echo "ADMIN_ID=\"$CHAT_ID\"" >> "$CONFIG_FILE"; fi
     update_system_files
     bash "$MANAGER_FILE" start
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE v4.5.2 SUKSES!</b>%0ASyntax Error fixed." -d parse_mode="HTML" >/dev/null
+    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE v4.6 SUKSES!</b>%0AFitur Lite & Switch Aktif." -d parse_mode="HTML" >/dev/null
     rm "$HOME/update_temp.sh" 2>/dev/null
     exit 0
 else
-    # INSTALL BARU
+    # INSTALL BARU (DIBERSIHKAN DARI TERMUX-API)
     clear
     termux-wake-lock
-    pkg update -y >/dev/null 2>&1 && pkg install -y cloudflared curl jq termux-api zip >/dev/null 2>&1
+    # HAPUS dependency termux-api, HANYA install yang penting
+    pkg update -y >/dev/null 2>&1 && pkg install -y cloudflared curl jq zip >/dev/null 2>&1
     termux-setup-storage
     mkdir -p "$DIR_UTAMA"
     UNIT=$(tr -dc A-Z0-9 </dev/urandom | head -c 4)
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="🔔 Pairing: <code>$UNIT</code>" -d parse_mode="HTML" >/dev/null
+    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="🔔 Pairing v4.6: <code>$UNIT</code>" -d parse_mode="HTML" >/dev/null
     echo "Menunggu Admin... Kode: $UNIT"
     OFFSET=0
     while true; do
