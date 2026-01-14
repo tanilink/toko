@@ -1,7 +1,8 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v5.0 - MULTI-STORE MANAGER
+# 🛡️ KASIRLITE REMOTE v5.0 (FIXED) - MULTI-STORE MANAGER
 # Fitur: Inline Buttons, Target Control, Multi-Device Support
+# Fix: Installer .bashrc & Callback Space Handling
 # ==========================================================
 
 # --- [BAGIAN ADMIN] ---
@@ -17,7 +18,7 @@ SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
 FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 update_system_files() {
-    echo "🛡️ Menerapkan Patch v5.0 (Multi-Cabang)..."
+    echo "🛡️ Menerapkan Patch v5.0 (Multi-Cabang Fixed)..."
 
     # ==========================================
     # 1. SERVICE BOT (DENGAN INLINE BUTTON & CALLBACK)
@@ -228,10 +229,13 @@ EOF
     chmod +x "$MANAGER_FILE"
 }
 
-# --- LOGIKA INSTALLER ---
+# --- LOGIKA INSTALLER (FIXED BASHRC) ---
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
-    if [ ! -f ~/.bashrc ]; then touch ~/.bashrc; fi
+    
+    # FIX: Pastikan .bashrc ada saat update
+    if [ ! -f ~/.bashrc ]; then echo "# .bashrc" > ~/.bashrc; fi
+    
     if ! grep -q "ADMIN_ID" "$CONFIG_FILE"; then echo "ADMIN_ID=\"$CHAT_ID\"" >> "$CONFIG_FILE"; fi
     update_system_files
     bash "$MANAGER_FILE" start
@@ -275,8 +279,21 @@ ADMIN_ID="$SENDER_ID"
 GITHUB_URL="$GITHUB_URL"
 EOF
     update_system_files
-    if [ ! -f ~/.bashrc ]; then touch ~/.bashrc; fi
-    source ~/.bashrc
-    if ! grep -q "alias menu=" ~/.bashrc; then echo "alias menu='bash $MANAGER_FILE'" >> ~/.bashrc; echo "alias nyala='bash $MANAGER_FILE start'" >> ~/.bashrc; fi
+    
+    # --- BAGIAN FIX BUG .BASHRC ---
+    # 1. Pastikan file dibuat dulu
+    if [ ! -f ~/.bashrc ]; then echo "# .bashrc" > ~/.bashrc; fi
+    
+    # 2. Cek apakah shortcut sudah ada, jika belum tambahkan
+    if ! grep -q "alias menu=" ~/.bashrc; then 
+        echo "" >> ~/.bashrc
+        echo "alias menu='bash $HOME/.kasirlite/manager.sh'" >> ~/.bashrc
+        echo "alias nyala='bash $HOME/.kasirlite/manager.sh start'" >> ~/.bashrc
+    fi
+    
+    # 3. Reload config (Aman karena file pasti ada)
+    source ~/.bashrc 2>/dev/null || true
+    # ------------------------------
+    
     bash "$MANAGER_FILE" start
 fi
