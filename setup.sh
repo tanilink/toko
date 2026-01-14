@@ -1,12 +1,13 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.9 - FINAL UI EDITION
-# Fitur: Keyboard Button UI, Manual Launch, Smart Pairing
+# 🛡️ KASIRLITE REMOTE v5.2 - GROUP DASHBOARD
+# Fitur: Support Multi-Bot dalam 1 Grup Telegram
+# Command Baru: /set_group (Pindah laporan ke Grup)
 # ==========================================================
 
 # --- [BAGIAN ADMIN] ---
 BOT_TOKEN="8548080118:AAEUP_FzU1OcNb-l5G_dTb3TaBbDS8-oYjE"
-CHAT_ID="7236113204"
+CHAT_ID="7236113204" # Awalnya Private, nanti berubah jadi Group ID
 GITHUB_URL="https://raw.githubusercontent.com/tanilink/toko/main/setup.sh"
 # ----------------------
 
@@ -17,10 +18,10 @@ SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
 FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 update_system_files() {
-    echo "🛡️ Menerapkan Patch v4.9 (UI Update)..."
+    echo "🛡️ Menerapkan Patch v5.2 (Group Support)..."
 
     # ==========================================
-    # 1. SERVICE BOT (DENGAN KEYBOARD BUTTON)
+    # 1. SERVICE BOT (GROUP AWARE)
     # ==========================================
     cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
@@ -30,20 +31,20 @@ FLAG_TUTUP="$HOME/.kasirlite/.toko_tutup"
 OFFSET=0
 COUNTER=0
 
-# --- FUNGSI KIRIM PESAN DENGAN TOMBOL KEYBOARD ---
 kirim_pesan() {
-    # JSON Keyboard Layout
-    KEYBOARD='{"keyboard":[
-    [{"text":"📊 Cek Status"},{"text":"📦 Backup DB"}],
-    [{"text":"🟢 Buka Toko"},{"text":"🔴 Tutup Toko"}],
-    [{"text":"🔄 Ganti Domain"},{"text":"⬇️ Update Sistem"}]
-    ],"resize_keyboard":true,"is_persistent":true}'
-
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-        -d chat_id="$CHAT_ID" \
-        -d text="$1" \
-        -d parse_mode="HTML" \
-        -d reply_markup="$KEYBOARD" >/dev/null
+    # Di Grup, kita tidak pakai tombol keyboard bawah (mengganggu)
+    # Kita pakai Inline Button (menempel di pesan) khusus untuk Grup
+    
+    # Cek jika CHAT_ID adalah Grup (diawali tanda -)
+    if [[ "$CHAT_ID" == "-"* ]]; then
+        curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" -d text="$1" -d parse_mode="HTML" >/dev/null
+    else
+        # Jika Private Chat, pakai Keyboard Button
+        KEYBOARD='{"keyboard":[[{"text":"📊 Cek Status"},{"text":"📦 Backup DB"}],[{"text":"🟢 Buka Toko"},{"text":"🔴 Tutup Toko"}],[{"text":"🔄 Ganti Domain"}]],"resize_keyboard":true,"is_persistent":true}'
+        curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" -d text="$1" -d parse_mode="HTML" -d reply_markup="$KEYBOARD" >/dev/null
+    fi
 }
 
 kirim_backup_zip() {
@@ -60,103 +61,88 @@ kirim_backup_zip() {
     fi
 }
 
-# Hapus menu slash lama agar bersih
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/deleteMyCommands" >/dev/null
-
-kirim_pesan "✅ <b>$NAMA_TOKO ONLINE (v4.9)</b>%0ATampilan Baru Siap Digunakan."
+kirim_pesan "✅ <b>$NAMA_TOKO ONLINE (v5.2)</b>%0AGroup Support Ready."
 
 while true; do
     RAW_UPDATES=$(curl -s -m 10 "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
 
     if [[ "$RAW_UPDATES" == *'"ok":true'* ]]; then
-        PARSED_DATA=$(echo "$RAW_UPDATES" | jq -r '.result[] | "\(.update_id)|\(.message.from.id)|\(.message.text | gsub("\n"; " "))"')
+        # PARSING: Ambil Chat ID asal pesan (Bisa Group, Bisa Private)
+        PARSED_DATA=$(echo "$RAW_UPDATES" | jq -r '.result[] | "\(.update_id)|\(.message.from.id)|\(.message.chat.id)|\(.message.text | gsub("\n"; " "))"')
         
         if [ ! -z "$PARSED_DATA" ]; then
-            while IFS='|' read -r UPDATE_ID SENDER_ID MSG_TEXT; do
+            while IFS='|' read -r UPDATE_ID SENDER_ID CHAT_ORIGIN MSG_TEXT; do
                 
-                # --- A. STATUS ---
+                # --- A. FITUR PINDAH KE GRUP (SET GROUP) ---
+                if [[ "$MSG_TEXT" == "/set_group"* ]]; then
+                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
+                    
+                    # Ubah CHAT_ID di Config menjadi ID Grup ini
+                    sed -i "s|^CHAT_ID=.*|CHAT_ID=\"$CHAT_ORIGIN\"|" "$CONFIG_FILE"
+                    
+                    # Refresh variable memori saat ini
+                    CHAT_ID="$CHAT_ORIGIN"
+                    
+                    kirim_pesan "🏢 <b>DASHBOARD AKTIF!</b>%0A$NAMA_TOKO sekarang melapor ke Grup ini."
+                fi
+
+                # --- B. STATUS ---
                 if [[ "$MSG_TEXT" == "📊 Cek Status"* ]] || [[ "$MSG_TEXT" == "/status"* ]]; then
                     if pgrep -f cloudflared >/dev/null; then CF="✅ ON"; else CF="❌ OFF"; fi
-                    if [ -f "$FLAG_TUTUP" ]; then MODE="🔴 DITUTUP"; else MODE="🟢 DIBUKA"; fi
-                    
-                    # Cek Web (Hanya Lapor)
+                    if [ -f "$FLAG_TUTUP" ]; then MODE="🔴 TUTUP"; else MODE="🟢 BUKA"; fi
                     WEB_STAT=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7575)
-                    if [ "$WEB_STAT" == "200" ]; then WEB="✅ READY"; else WEB="⚠️ MATI (Buka App!)"; fi
+                    if [ "$WEB_STAT" == "200" ]; then WEB="✅ READY"; else WEB="⚠️ MATI"; fi
                     
-                    kirim_pesan "📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A📱 App Kasir: $WEB%0A🔐 Mode: $MODE%0A🛡️ Versi: v4.9 (Stable)"
+                    # Jika di Grup, tampilkan nama toko tebal agar mudah dibaca
+                    kirim_pesan "📍 <b>$NAMA_TOKO</b>%0A☁️ $CF | 📱 $WEB | 🔐 $MODE"
                 fi
 
-                # --- B. BACKUP ---
-                if [[ "$MSG_TEXT" == "📦 Backup DB"* ]] || [[ "$MSG_TEXT" == "/backup"* ]]; then 
-                    kirim_backup_zip "Remote Backup"
-                fi
-
-                # --- C. ADMIN ONLY ---
-                
-                # 1. CLOSE
+                # --- C. CONTROL (Hanya Admin) ---
                 if [[ "$MSG_TEXT" == "🔴 Tutup Toko"* ]] || [[ "$MSG_TEXT" == "/close"* ]]; then
                     if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
                     touch "$FLAG_TUTUP"
                     pkill -f cloudflared
-                    kirim_pesan "🔴 <b>TOKO DITUTUP!</b>%0AAkses internet dimatikan."
+                    kirim_pesan "🔴 <b>$NAMA_TOKO DITUTUP!</b>"
                 fi
 
-                # 2. OPEN (MANUAL)
                 if [[ "$MSG_TEXT" == "🟢 Buka Toko"* ]] || [[ "$MSG_TEXT" == "/open"* ]]; then
                     if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
                     if [ -f "$FLAG_TUTUP" ]; then rm "$FLAG_TUTUP"; fi 
-                    
                     if ! pgrep -f cloudflared >/dev/null; then
                         nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
-                        # PESAN PENGINGAT MANUAL
-                        kirim_pesan "⏳ <b>MENYALAKAN TUNNEL...</b>%0A⚠️ <b>PENTING:</b> Pastikan Aplikasi Kasir sudah dibuka manual di layar Tablet."
-                        sleep 10
-                        if pgrep -f cloudflared >/dev/null; then
-                            kirim_pesan "✅ <b>TUNNEL ONLINE!</b>%0ASilakan cek akses toko."
-                        else
-                            kirim_pesan "⚠️ <b>GAGAL START!</b> Cek Token."
-                        fi
+                        kirim_pesan "⏳ <b>$NAMA_TOKO MENYALA...</b>%0ABuka App Kasir Manual!"
                     else
-                        kirim_pesan "🟢 <b>SUDAH BUKA!</b>%0ATunnel sudah aktif."
+                        kirim_pesan "🟢 <b>$NAMA_TOKO SUDAH BUKA!</b>"
                     fi
                 fi
 
-                # 3. GANTI DOMAIN (SET TUNNEL)
-                # Format text manual: /set_tunnel [TOKEN]
-                # Tombol hanya memberikan instruksi
-                if [[ "$MSG_TEXT" == "🔄 Ganti Domain"* ]]; then
-                     kirim_pesan "ℹ️ <b>CARA GANTI DOMAIN:</b>%0ASilakan balas dengan format:%0A<code>/set_tunnel TOKEN_BARU_DARI_CLOUDFLARE</code>"
-                fi
-
+                # --- D. SETUP LAINNYA ---
+                if [[ "$MSG_TEXT" == "/backup"* ]]; then kirim_backup_zip "Manual"; fi
+                
                 if [[ "$MSG_TEXT" == "/set_tunnel"* ]]; then
                     if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
                     TOKEN_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
-                    if [ ${#TOKEN_BARU} -lt 30 ]; then kirim_pesan "❌ <b>TOKEN INVALID!</b>"; continue; fi
-                    
-                    kirim_pesan "🔄 <b>MENGGANTI DOMAIN...</b>%0AMencoba token baru..."
-                    TOKEN_LAMA=$(grep "TUNNEL_TOKEN=" "$CONFIG_FILE" | cut -d'"' -f2)
                     sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=\"$TOKEN_BARU\"|" "$CONFIG_FILE"
-                    
                     pkill -f cloudflared
                     nohup cloudflared tunnel run --token "$TOKEN_BARU" >/dev/null 2>&1 &
-                    
-                    sleep 15
-                    if pgrep -f cloudflared >/dev/null; then
-                        kirim_pesan "✅ <b>SUKSES GANTI DOMAIN!</b>"
-                    else
-                        kirim_pesan "⚠️ <b>GAGAL! ROLLBACK...</b>"
-                        sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=\"$TOKEN_LAMA\"|" "$CONFIG_FILE"
-                        pkill -f cloudflared
-                        nohup cloudflared tunnel run --token "$TOKEN_LAMA" >/dev/null 2>&1 &
-                        sleep 5
-                        kirim_pesan "✅ <b>ROLLBACK SELESAI.</b>"
-                    fi
+                    kirim_pesan "✅ $NAMA_TOKO Ganti Domain."
                 fi
 
-                # 4. UPDATE
-                if [[ "$MSG_TEXT" == "⬇️ Update Sistem"* ]] || [[ "$MSG_TEXT" == "/update"* ]]; then
+                if [[ "$MSG_TEXT" == "/ganti_bot"* ]]; then
+                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
+                    BOT_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
+                    kirim_pesan "🔄 $NAMA_TOKO Pindah Bot..."
+                    sed -i "s|^BOT_TOKEN=.*|BOT_TOKEN=\"$BOT_BARU\"|" "$CONFIG_FILE"
+                    # Reset CHAT_ID ke Admin dulu agar tidak error di bot baru
+                    sed -i "s|^CHAT_ID=.*|CHAT_ID=\"$ADMIN_ID\"|" "$CONFIG_FILE"
+                    nohup bash "$HOME/.kasirlite/manager.sh" restart_remote >/dev/null 2>&1 &
+                    exit 0
+                fi
+                
+                if [[ "$MSG_TEXT" == "/update"* ]]; then
                      if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
-                     kirim_pesan "⬇️ Update v4.9..."
+                     kirim_pesan "⬇️ $NAMA_TOKO Updating..."
                      curl -sL "$GITHUB_URL" > "$HOME/update_temp.sh"
                      bash "$HOME/update_temp.sh" mode_update
                 fi
@@ -173,7 +159,7 @@ EOF
     chmod +x "$SERVICE_FILE"
 
     # ==========================================
-    # 2. MANAGER SCRIPT (BERSIH & MANUAL)
+    # 2. MANAGER SCRIPT
     # ==========================================
     cat << 'EOF' > "$MANAGER_FILE"
 #!/bin/bash
@@ -184,7 +170,7 @@ FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 jalankan_layanan() {
     source "$CONFIG_FILE"
-    echo "🚀 Menyalakan $NAMA_TOKO (v4.9)..."
+    echo "🚀 Menyalakan $NAMA_TOKO (v5.2)..."
     termux-wake-lock
     pkill -f "cloudflared"
     pkill -f "service_bot.sh"
@@ -200,14 +186,15 @@ jalankan_layanan() {
     
     nohup bash "$SERVICE_FILE" >/dev/null 2>&1 &
     echo "✅ Bot Service Started."
-    echo "👉 INFO: Silakan BUKA APLIKASI KASIR secara manual di layar."
+    echo "👉 INFO: Silakan BUKA APLIKASI KASIR secara manual."
 }
 
 tampilkan_menu() {
     source "$CONFIG_FILE"
     while true; do
         clear
-        echo "=== KASIRLITE v4.9: $NAMA_TOKO ==="
+        echo "=== KASIRLITE v5.2: $NAMA_TOKO ==="
+        echo "   [ GROUP SUPPORT READY ]"
         if [ -f "$FLAG_TUTUP" ]; then echo "[ STATUS: 🔴 CLOSED / TUTUP ]"; else echo "[ STATUS: 🟢 OPEN / BUKA ]"; fi
         echo "--------------------------------"
         echo "1. Cek Status Web Local"
@@ -228,16 +215,14 @@ EOF
     chmod +x "$MANAGER_FILE"
 }
 
-# --- LOGIKA UTAMA & PAIRING INSTRUCTION ---
+# --- LOGIKA INSTALLER ---
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
-    # Pastikan file .bashrc ada (FIX BUG INSTALLER)
     if [ ! -f ~/.bashrc ]; then touch ~/.bashrc; fi
-    
     if ! grep -q "ADMIN_ID" "$CONFIG_FILE"; then echo "ADMIN_ID=\"$CHAT_ID\"" >> "$CONFIG_FILE"; fi
     update_system_files
     bash "$MANAGER_FILE" start
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE v4.9 SUKSES!</b>%0ATampilan Tombol Aktif." -d parse_mode="HTML" >/dev/null
+    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE v5.2 SUKSES!</b>%0ASiap Masuk Grup." -d parse_mode="HTML" >/dev/null
     rm "$HOME/update_temp.sh" 2>/dev/null
     exit 0
 else
@@ -249,8 +234,7 @@ else
     mkdir -p "$DIR_UTAMA"
     UNIT=$(tr -dc A-Z0-9 </dev/urandom | head -c 4)
     
-    # --- PESAN PAIRING YANG JELAS ---
-    MSG="🔔 <b>PAIRING PERANGKAT BARU</b>%0AKode Unit: <code>$UNIT</code>%0A%0ASilakan Copy & Reply pesan ini dengan format:%0A<code>/deploy $UNIT [TOKEN_CLOUDFLARE] [NAMA_CABANG]</code>"
+    MSG="🔔 <b>PAIRING PERANGKAT BARU</b>%0AKode Unit: <code>$UNIT</code>%0A%0ASilakan Reply format:%0A<code>/deploy $UNIT [TOKEN] [NAMA_CABANG]</code>"
     
     curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML" >/dev/null
     echo "Menunggu Admin... Kode: $UNIT"
@@ -278,11 +262,8 @@ ADMIN_ID="$SENDER_ID"
 GITHUB_URL="$GITHUB_URL"
 EOF
     update_system_files
-    
-    # FIX BUG BASHRC (Membuat file sebelum diisi)
     if [ ! -f ~/.bashrc ]; then touch ~/.bashrc; fi
     source ~/.bashrc
     if ! grep -q "alias menu=" ~/.bashrc; then echo "alias menu='bash $MANAGER_FILE'" >> ~/.bashrc; echo "alias nyala='bash $MANAGER_FILE start'" >> ~/.bashrc; fi
-    
     bash "$MANAGER_FILE" start
 fi
