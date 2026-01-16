@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (STABLE FINAL)
-# Fitur: Force Update, Auto-Fix Config, Dynamic Password
+# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (ANTI-LOOP)
+# Fitur: Force Update, Auto-Fix Config, Anti-Ghost Message
 # ==========================================================
 
 # --- [KONFIGURASI PUSAT] ---
@@ -17,23 +17,20 @@ FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 # --- FUNGSI AUTO-RESTART ---
 pasang_cronjob() {
-    # Cek & Install Cronie jika belum ada
     if ! pkg list-installed 2>/dev/null | grep -q "cronie"; then
         pkg install cronie termux-services -y >/dev/null 2>&1
         sv-enable crond >/dev/null 2>&1
     fi
-    # Reset crontab biar tidak duplikat
     crontab -r 2>/dev/null
-    # Set jadwal jam 09:00 Pagi
     echo "0 9 * * * bash $HOME/.kasirlite/manager.sh start" | crontab -
 }
 
 update_system_files() {
-    echo "🛡️ Menerapkan Sistem v4.9 Platinum..."
+    echo "🛡️ Menerapkan Sistem v4.9 Platinum (Anti-Loop)..."
     pasang_cronjob
 
     # ==========================================
-    # 1. SERVICE BOT (DENGAN ANTI-CRASH JSON)
+    # 1. SERVICE BOT (DENGAN ANTI-LOOP)
     # ==========================================
     cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
@@ -73,13 +70,12 @@ kirim_backup_zip() {
 }
 
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/deleteMyCommands" >/dev/null
-kirim_pesan "✅ <b>$NAMA_TOKO ONLINE (v4.9 Platinum)</b>%0ASistem Stabil & Aman."
+kirim_pesan "✅ <b>$NAMA_TOKO ONLINE (v4.9 Platinum)</b>%0ASistem Stabil."
 
 while true; do
     RAW_UPDATES=$(curl -s -m 10 "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
 
     if [[ "$RAW_UPDATES" == *'"ok":true'* ]]; then
-        # JQ FILTER: Membersihkan Newline dan Double Quote agar JSON tidak error
         PARSED_DATA=$(echo "$RAW_UPDATES" | jq -r '.result[] | "\(.update_id)|\(.message.from.id)|\(.message.text | gsub("\n"; " ") | gsub("\""; ""))"')
         
         if [ ! -z "$PARSED_DATA" ]; then
@@ -122,35 +118,43 @@ while true; do
                 fi
 
                 # --- D. MANAJEMEN PASSWORD ---
-                if [[ "$MSG_TEXT" == "🔐 Ganti Pass Menu"* ]]; then
-                     kirim_pesan "ℹ️ Balas dengan format:%0A<code>/set_password ANGKA_BARU</code>"
-                fi
-                if [[ "$MSG_TEXT" == "/set_password"* ]]; then
+                if [[ "$MSG_TEXT" == "🔐 Ganti Pass Menu"* ]] || [[ "$MSG_TEXT" == "/set_password"* ]]; then
                     if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
-                    PASS_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
-                    if [ -z "$PASS_BARU" ]; then kirim_pesan "❌ Password tidak boleh kosong."; continue; fi
-                    sed -i "s|^MENU_PASSWORD=.*|MENU_PASSWORD=\"$PASS_BARU\"|" "$CONFIG_FILE"
-                    kirim_pesan "✅ <b>PASSWORD MENU DIGANTI!</b>%0APassword Baru: <code>$PASS_BARU</code>"
+                    if [[ "$MSG_TEXT" == "🔐 Ganti Pass Menu"* ]]; then
+                         kirim_pesan "ℹ️ Balas: <code>/set_password ANGKA_BARU</code>"
+                    else
+                        PASS_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
+                        if [ -z "$PASS_BARU" ]; then kirim_pesan "❌ Password kosong."; continue; fi
+                        sed -i "s|^MENU_PASSWORD=.*|MENU_PASSWORD=\"$PASS_BARU\"|" "$CONFIG_FILE"
+                        kirim_pesan "✅ <b>PASSWORD MENU DIGANTI!</b>%0APassword Baru: <code>$PASS_BARU</code>"
+                    fi
                 fi
 
                 # --- E. GANTI DOMAIN ---
-                if [[ "$MSG_TEXT" == "🔄 Ganti Domain"* ]]; then
-                     kirim_pesan "ℹ️ Balas dengan format:%0A<code>/set_tunnel TOKEN_CLOUDFLARE_BARU</code>"
-                fi
-                if [[ "$MSG_TEXT" == "/set_tunnel"* ]]; then
-                    if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
-                    TOKEN_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
-                    if [ ${#TOKEN_BARU} -lt 30 ]; then kirim_pesan "❌ Token Invalid!"; continue; fi
-                    sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=\"$TOKEN_BARU\"|" "$CONFIG_FILE"
-                    pkill -f cloudflared
-                    nohup cloudflared tunnel run --token "$TOKEN_BARU" >/dev/null 2>&1 &
-                    kirim_pesan "✅ <b>SUKSES GANTI DOMAIN!</b>"
+                if [[ "$MSG_TEXT" == "🔄 Ganti Domain"* ]] || [[ "$MSG_TEXT" == "/set_tunnel"* ]]; then
+                    if [[ "$MSG_TEXT" == "🔄 Ganti Domain"* ]]; then
+                         kirim_pesan "ℹ️ Balas: <code>/set_tunnel TOKEN_CLOUDFLARE_BARU</code>"
+                    else
+                        if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
+                        TOKEN_BARU=$(echo "$MSG_TEXT" | awk '{print $2}')
+                        if [ ${#TOKEN_BARU} -lt 30 ]; then kirim_pesan "❌ Token Invalid!"; continue; fi
+                        sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=\"$TOKEN_BARU\"|" "$CONFIG_FILE"
+                        pkill -f cloudflared
+                        nohup cloudflared tunnel run --token "$TOKEN_BARU" >/dev/null 2>&1 &
+                        kirim_pesan "✅ <b>SUKSES GANTI DOMAIN!</b>"
+                    fi
                 fi
 
-                # --- F. FORCE UPDATE ---
+                # --- F. FORCE UPDATE (DENGAN ANTI-LOOP) ---
                 if [[ "$MSG_TEXT" == "⬇️ Update Sistem"* ]] || [[ "$MSG_TEXT" == "/update"* ]]; then
                      if [ "$SENDER_ID" != "$ADMIN_ID" ]; then continue; fi
-                     kirim_pesan "⬇️ <b>MEMULAI FORCE UPDATE...</b>%0AMenginstal ulang paket & menyegarkan sistem."
+                     kirim_pesan "⬇️ <b>MEMULAI UPDATE...</b>"
+                     
+                     # [PENTING] KONFIRMASI PESAN KE TELEGRAM SEBELUM MATI
+                     # Ini membuang pesan 'Update' dari antrian agar tidak looping
+                     curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((UPDATE_ID+1))" >/dev/null
+                     
+                     # Jalankan Update
                      curl -sL "$GITHUB_URL" > "$HOME/update_temp.sh"
                      bash "$HOME/update_temp.sh" mode_update
                 fi
@@ -167,7 +171,7 @@ EOF
     chmod +x "$SERVICE_FILE"
 
     # ==========================================
-    # 2. MANAGER SCRIPT (BACA PASSWORD DARI CONFIG)
+    # 2. MANAGER SCRIPT
     # ==========================================
     cat << 'EOF' > "$MANAGER_FILE"
 #!/bin/bash
@@ -198,31 +202,17 @@ jalankan_layanan() {
 
 ganti_token_darurat() {
     PASS_SAAT_INI=$(grep "MENU_PASSWORD=" "$CONFIG_FILE" | cut -d'"' -f2)
+    echo ""; echo "🔒 FITUR TERKUNCI"; read -p "🔑 Masukkan Password Admin: " INPUT_PASS
+    if [ "$INPUT_PASS" != "$PASS_SAAT_INI" ]; then echo "❌ PASSWORD SALAH!"; sleep 2; return; fi
     
-    echo ""
-    echo "🔒 FITUR TERKUNCI (SECURITY)"
-    read -p "🔑 Masukkan Password Admin: " INPUT_PASS
-    
-    if [ "$INPUT_PASS" != "$PASS_SAAT_INI" ]; then
-        echo "❌ PASSWORD SALAH! Akses Ditolak."
-        sleep 2
-        return
-    fi
-    
-    echo ""
-    echo "✅ Akses Diterima."
-    echo "⚠️  MODE DARURAT: GANTI BOT ⚠️"
-    read -p "👉 Tempel (Paste) Token Bot BARU: " NEW_TOKEN
-    
-    if [ -z "$NEW_TOKEN" ]; then echo "❌ Batal."; sleep 1; return; fi
-    if [[ "$NEW_TOKEN" != *":"* ]]; then echo "❌ Format Token salah!"; return; fi
+    echo ""; echo "⚠️  MODE DARURAT: GANTI BOT ⚠️"
+    read -p "👉 Tempel Token Bot BARU: " NEW_TOKEN
+    if [[ "$NEW_TOKEN" != *":"* ]]; then echo "❌ Token Salah!"; return; fi
 
     sed -i "s|BOT_TOKEN=.*|BOT_TOKEN=\"$NEW_TOKEN\"|" "$CONFIG_FILE"
-    echo "✅ Token Berhasil Disimpan!"
-    echo "🔄 Merestart Layanan..."
+    echo "✅ Disimpan! Restarting..."
     jalankan_layanan
-    echo "✅ Selesai."
-    read -p "Tekan Enter..."
+    echo "✅ Selesai."; read -p "Enter..."
 }
 
 tampilkan_menu() {
@@ -231,11 +221,11 @@ tampilkan_menu() {
         clear
         echo "=== KASIRLITE v4.9: $NAMA_TOKO ==="
         echo "   [ PLATINUM EDITION ]"
-        if [ -f "$FLAG_TUTUP" ]; then echo "[ STATUS: 🔴 CLOSED / TUTUP ]"; else echo "[ STATUS: 🟢 OPEN / BUKA ]"; fi
+        if [ -f "$FLAG_TUTUP" ]; then echo "[ STATUS: 🔴 CLOSED ]"; else echo "[ STATUS: 🟢 OPEN ]"; fi
         echo "--------------------------------"
         echo "1. Cek Status Web Local"
-        echo "2. Kirim Backup Manual (Darurat)"
-        echo "3. Refresh Service (Restart)"
+        echo "2. Kirim Backup Manual"
+        echo "3. Refresh Service"
         echo "4. ⚠️ GANTI TOKEN BOT (Password)"
         echo "0. Keluar"
         echo "--------------------------------"
@@ -255,27 +245,21 @@ EOF
 }
 
 # ==========================================
-# 3. INSTALLER & UPDATER LOGIC
+# 3. INSTALLER & UPDATER
 # ==========================================
-
-# --- MODE FORCE UPDATE (Penyembuhan Total) ---
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
+    termux-wake-lock
     
-    echo "🔄 Memulai Force Update..."
-    termux-wake-lock # Biar gak tidur pas update
-    
-    # [A] SELF-HEALING CONFIG
-    # Tambahkan variabel baru jika config lama belum punya
+    # Auto-Fix Config
     if ! grep -q "MENU_PASSWORD" "$CONFIG_FILE"; then echo 'MENU_PASSWORD="123456"' >> "$CONFIG_FILE"; fi
     if ! grep -q "ADMIN_ID" "$CONFIG_FILE"; then echo "ADMIN_ID=\"$CHAT_ID\"" >> "$CONFIG_FILE"; fi
 
-    # [B] RE-INSTALL DEPENDENCIES (Anti-Drama)
-    echo "📦 Mengecek Paket Sistem..."
+    # Re-Install Paket
     pkg update -y >/dev/null 2>&1
     pkg install -y cloudflared curl jq zip cronie termux-services >/dev/null 2>&1
     
-    # [C] PERBAIKI SHORTCUT
+    # Fix Bashrc
     if [ ! -f ~/.bashrc ]; then echo "# .bashrc" > ~/.bashrc; fi
     if ! grep -q "alias menu=" ~/.bashrc; then 
         echo "alias menu='bash $HOME/.kasirlite/manager.sh'" >> ~/.bashrc
@@ -285,37 +269,27 @@ if [ "$1" == "mode_update" ]; then
 
     update_system_files
     
-    # [D] RESTART
     bash "$MANAGER_FILE" start
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE SUKSES!</b>%0ASistem telah disegarkan total (Force Update)." -d parse_mode="HTML" >/dev/null
+    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE SUKSES!</b>%0ALoop Error Fixed." -d parse_mode="HTML" >/dev/null
     rm "$HOME/update_temp.sh" 2>/dev/null
     exit 0
 
 else
-    # --- MODE INSTALL BARU ---
-    clear
-    echo "   🛡️ KASIRLITE v4.9 PLATINUM INSTALLER   "
+    # INSTALL BARU
+    clear; echo "   🛡️ KASIRLITE v4.9 PLATINUM   "
+    read -p "👉 Tempel TOKEN BOT: " INPUT_BOT_TOKEN
+    [ -z "$INPUT_BOT_TOKEN" ] && exit 1
     
-    # [A] INPUT TOKEN
-    read -p "👉 Tempel (Paste) TOKEN BOT: " INPUT_BOT_TOKEN
-    if [ -z "$INPUT_BOT_TOKEN" ]; then echo "❌ Token kosong!"; exit 1; fi
-    
-    echo "⏳ Menyiapkan Sistem..."
-    termux-wake-lock # PENTING: Anti-Sleep di awal
-    
-    # [B] INSTALL PAKET
-    pkg update -y >/dev/null 2>&1
-    pkg install -y cloudflared curl jq zip cronie termux-services >/dev/null 2>&1
+    termux-wake-lock
+    pkg update -y >/dev/null 2>&1 && pkg install -y cloudflared curl jq zip cronie termux-services >/dev/null 2>&1
     termux-setup-storage
     mkdir -p "$DIR_UTAMA"
     
-    # [C] PAIRING
     UNIT=$(tr -dc A-Z0-9 </dev/urandom | head -c 4)
     MSG="🔔 <b>PAIRING BARU</b>%0AKode: <code>$UNIT</code>%0A%0AReply: <code>/deploy $UNIT [TOKEN_CF] [NAMA]</code>"
     
-    # Cek Koneksi dulu
     CEK=$(curl -s -X POST "https://api.telegram.org/bot$INPUT_BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML")
-    if [[ "$CEK" != *'"ok":true'* ]]; then echo "❌ Token Bot Salah / Koneksi Gagal!"; exit 1; fi
+    if [[ "$CEK" != *'"ok":true'* ]]; then echo "❌ Token Salah!"; exit 1; fi
     
     echo "Menunggu Pairing... Kode: $UNIT"
     OFFSET=0
@@ -333,7 +307,6 @@ else
         sleep 2
     done
     
-    # [D] BUAT CONFIG
     cat <<EOF > "$CONFIG_FILE"
 NAMA_TOKO="$NAMA"
 TUNNEL_TOKEN="$TOKEN"
@@ -346,13 +319,11 @@ EOF
     
     update_system_files
     
-    # [E] SHORTCUT FIX
     if [ ! -f ~/.bashrc ]; then echo "# .bashrc" > ~/.bashrc; fi
     if ! grep -q "alias menu=" ~/.bashrc; then 
         echo "alias menu='bash $HOME/.kasirlite/manager.sh'" >> ~/.bashrc
         echo "alias nyala='bash $HOME/.kasirlite/manager.sh start'" >> ~/.bashrc
     fi
     source ~/.bashrc 2>/dev/null || true
-    
     bash "$MANAGER_FILE" start
 fi
