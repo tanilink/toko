@@ -1,7 +1,7 @@
 
 # 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (BUG FIX)
 
-![Version](https://img.shields.io/badge/version-v4.5-blue?style=flat-square) ![Stability](https://img.shields.io/badge/stability-stable-success?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square) [![WhatsApp](https://img.shields.io/badge/WhatsApp-Chat_Admin-25D366?style=flat-square&logo=whatsapp)](https://wa.me/6281775700114)
+![Version](https://img.shields.io/badge/version-v4.9-blue?style=flat-square) ![Stability](https://img.shields.io/badge/stability-stable-success?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square) [![WhatsApp](https://img.shields.io/badge/WhatsApp-Chat_Admin-25D366?style=flat-square&logo=whatsapp)](https://wa.me/6281775700114)
 
 **KasirLite Remote** adalah sistem manajemen armada (*Fleet Management*) berbasis Termux untuk perangkat POS (Point of Sales) Android. Sistem ini memungkinkan pemilik bisnis untuk memantau, mengamankan, dan mengelola ratusan cabang toko secara terpusat melalui **Telegram Bot**, tanpa memerlukan server VPS dedicated.
 
