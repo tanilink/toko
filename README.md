@@ -1,5 +1,5 @@
 
-# 🚀 KasirLite Remote v4.5 (Enterprise Edition)
+# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (BUG FIX)
 
 ![Version](https://img.shields.io/badge/version-v4.5-blue?style=flat-square) ![Stability](https://img.shields.io/badge/stability-stable-success?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square) [![WhatsApp](https://img.shields.io/badge/WhatsApp-Chat_Admin-25D366?style=flat-square&logo=whatsapp)](https://wa.me/6281775700114)
 
