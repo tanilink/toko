@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (LOADING FIX)
-# Fitur: Staff UI + Indikator Loading Jelas
+# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (STABLE LOOP FIX)
+# Fitur: Staff UI + Anti-Loop Restart & Update
 # ==========================================================
 
 # --- [KONFIGURASI PUSAT] ---
@@ -25,11 +25,11 @@ pasang_cronjob() {
 }
 
 update_system_files() {
-    echo "🛡️ Menerapkan Sistem Platinum..."
+    echo "🛡️ Menerapkan Patch Anti-Loop..."
     pasang_cronjob
 
     # ==========================================
-    # 1. SERVICE BOT (STAFF UI)
+    # 1. SERVICE BOT (PATCHED)
     # ==========================================
     cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
@@ -47,7 +47,6 @@ kirim_pesan() {
     local TEXT=$2
     local MODE_KEYBOARD=$3 
     
-    # MODE 1: MENU UTAMA OWNER
     if [ "$MODE_KEYBOARD" == "MAIN_OWNER" ]; then
         KEYBOARD='{"keyboard":[
         [{"text":"📊 Cek Status"},{"text":"📦 Backup DB"}],
@@ -55,32 +54,23 @@ kirim_pesan() {
         [{"text":"🔄 Restart Service"},{"text":"⬇️ Update Sistem"}],
         [{"text":"➕ Manajemen Staff"},{"text":"🔐 Ganti Password"}]
         ],"resize_keyboard":true,"is_persistent":true}'
-    
-    # MODE 2: MENU UTAMA STAFF
     elif [ "$MODE_KEYBOARD" == "MAIN_STAFF" ]; then
         KEYBOARD='{"keyboard":[
         [{"text":"📊 Cek Status"},{"text":"📦 Backup DB"}],
         [{"text":"🔄 Restart Service"}]
         ],"resize_keyboard":true,"is_persistent":true}'
-    
-    # MODE 3: SUB-MENU STAFF (GANTI/HAPUS)
     elif [ "$MODE_KEYBOARD" == "SUB_STAFF" ]; then
         KEYBOARD='{"keyboard":[
         [{"text":"✏️ Ganti Staff"},{"text":"🗑️ Hapus Staff"}],
         [{"text":"🔙 Kembali ke Menu Utama"}]
         ],"resize_keyboard":true,"is_persistent":true}'
-        
     else
         curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
             -d chat_id="$TARGET_ID" -d text="$TEXT" -d parse_mode="HTML" >/dev/null
         return
     fi
-
     curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-        -d chat_id="$TARGET_ID" \
-        -d text="$TEXT" \
-        -d parse_mode="HTML" \
-        -d reply_markup="$KEYBOARD" >/dev/null
+        -d chat_id="$TARGET_ID" -d text="$TEXT" -d parse_mode="HTML" -d reply_markup="$KEYBOARD" >/dev/null
 }
 
 kirim_backup_zip() {
@@ -99,7 +89,7 @@ kirim_backup_zip() {
 }
 
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/deleteMyCommands" >/dev/null
-kirim_pesan "$ADMIN_ID" "✅ <b>$NAMA_TOKO ONLINE</b>%0AStaff UI Ready." "MAIN_OWNER"
+kirim_pesan "$ADMIN_ID" "✅ <b>$NAMA_TOKO ONLINE</b>%0ASistem Stabil (Loop Fixed)." "MAIN_OWNER"
 
 while true; do
     RAW_UPDATES=$(curl -s -m 10 "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
@@ -110,22 +100,19 @@ while true; do
         if [ ! -z "$PARSED_DATA" ]; then
             while IFS='|' read -r UPDATE_ID SENDER_ID MSG_TEXT; do
                 
-                # --- [1] IDENTIFIKASI USER ---
+                # IDENTIFIKASI USER
                 IS_OWNER=false; IS_STAFF=false
                 if [ "$SENDER_ID" == "$ADMIN_ID" ]; then IS_OWNER=true;
                 elif [ "$SENDER_ID" == "$STAFF_ID" ]; then IS_STAFF=true;
                 else OFFSET=$UPDATE_ID; continue; fi
 
-                # --- [2] LOGIKA PERINTAH ---
-                
-                # === FITUR UMUM ===
+                # LOGIKA PERINTAH
                 if [[ "$MSG_TEXT" == "📊 Cek Status"* ]] || [[ "$MSG_TEXT" == "/status"* ]]; then
                     if pgrep -f cloudflared >/dev/null; then CF="✅ ON"; else CF="❌ OFF"; fi
                     if [ -f "$FLAG_TUTUP" ]; then MODE="🔴 DITUTUP"; else MODE="🟢 DIBUKA"; fi
                     WEB_STAT=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7575)
                     if [ "$WEB_STAT" == "200" ]; then WEB="✅ READY"; else WEB="⚠️ MATI"; fi
                     INFO="📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A📱 App: $WEB%0A🔐 Mode: $MODE"
-                    
                     if [ "$IS_OWNER" == "true" ]; then K_TYPE="MAIN_OWNER"; else K_TYPE="MAIN_STAFF"; fi
                     kirim_pesan "$SENDER_ID" "$INFO" "$K_TYPE"
                 fi
@@ -134,6 +121,7 @@ while true; do
                     kirim_backup_zip "$SENDER_ID" "Remote Backup"
                 fi
                 
+                # --- [FIXED] RESTART DENGAN ANTI-LOOP ---
                 if [[ "$MSG_TEXT" == "🔄 Restart Service"* ]]; then
                     BOLEH=true
                     if [ "$IS_OWNER" == "false" ]; then
@@ -152,13 +140,17 @@ while true; do
                     if [ "$BOLEH" == "true" ]; then
                          if [ "$IS_OWNER" == "true" ]; then K_TYPE="MAIN_OWNER"; else K_TYPE="MAIN_STAFF"; fi
                          kirim_pesan "$SENDER_ID" "🔄 <b>RESTARTING...</b>" "$K_TYPE"
+                         
+                         # >> OBAT ANTI-LOOP DISINI <<
+                         # Bot 'Makan' pesan dulu (tandai sudah dibaca) baru mati
+                         curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((UPDATE_ID+1))" >/dev/null
+                         
                          nohup bash "$HOME/.kasirlite/manager.sh" start >/dev/null 2>&1 &
                     fi
                 fi
 
-                # === FITUR KHUSUS OWNER ===
+                # FITUR KHUSUS OWNER
                 if [ "$IS_OWNER" == "true" ]; then
-                
                     if [[ "$MSG_TEXT" == "🔴 Tutup Toko"* ]]; then
                         touch "$FLAG_TUTUP"; pkill -f cloudflared
                         kirim_pesan "$SENDER_ID" "🔴 <b>TOKO DITUTUP!</b>" "MAIN_OWNER"
@@ -173,20 +165,23 @@ while true; do
                         fi
                     fi
                     
+                    # --- [FIXED] UPDATE DENGAN ANTI-LOOP ---
                     if [[ "$MSG_TEXT" == "⬇️ Update Sistem"* ]]; then
                          kirim_pesan "$SENDER_ID" "⬇️ <b>FORCE UPDATE...</b>" "MAIN_OWNER"
+                         
+                         # >> OBAT ANTI-LOOP DISINI <<
                          curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((UPDATE_ID+1))" >/dev/null
+                         
                          curl -sL "$GITHUB_URL" > "$HOME/update_temp.sh"
                          bash "$HOME/update_temp.sh" mode_update
                     fi
+                    
                     if [[ "$MSG_TEXT" == "🔐 Ganti Password"* ]]; then kirim_pesan "$SENDER_ID" "ℹ️ Balas: <code>/set_password 123456</code>" "MAIN_OWNER"; fi
                     if [[ "$MSG_TEXT" == "/set_password"* ]]; then
                         NEW_P=$(echo "$MSG_TEXT" | awk '{print $2}')
                         sed -i "s|^MENU_PASSWORD=.*|MENU_PASSWORD=\"$NEW_P\"|" "$CONFIG_FILE"
                         kirim_pesan "$SENDER_ID" "✅ Pass diganti: $NEW_P" "MAIN_OWNER"
                     fi
-
-                    # MANAJEMEN STAFF
                     if [[ "$MSG_TEXT" == "➕ Manajemen Staff"* ]]; then
                         CURR_STAFF=$(grep "STAFF_ID=" "$CONFIG_FILE" | cut -d'"' -f2)
                         if [ -z "$CURR_STAFF" ]; then INFO_S="❌ <b>KOSONG</b>"; else INFO_S="👤 ID: <code>$CURR_STAFF</code>"; fi
@@ -288,7 +283,7 @@ EOF
 }
 
 # ==========================================
-# 3. INSTALLER & UPDATER
+# 3. INSTALLER & UPDATER (FIXED)
 # ==========================================
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
@@ -311,11 +306,7 @@ else
     clear; echo "   🛡️ KASIRLITE v4.9 PLATINUM   "
     read -p "👉 Tempel TOKEN BOT: " INPUT_BOT_TOKEN < /dev/tty
     
-    echo ""
-    echo "⏳ MEMPROSES SYSTEM... (JANGAN DITUTUP!)"
-    echo "   Sambil menunggu, seruput kopinya dulu ☕"
-    echo "   (Proses download bisa memakan waktu 2-3 menit)"
-    
+    echo ""; echo "⏳ MEMPROSES SYSTEM... (JANGAN DITUTUP!)"
     [ -z "$INPUT_BOT_TOKEN" ] && echo "❌ Token Kosong!" && exit 1
     
     termux-wake-lock
@@ -329,8 +320,7 @@ else
     CEK=$(curl -s -X POST "https://api.telegram.org/bot$INPUT_BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML")
     if [[ "$CEK" != *'"ok":true'* ]]; then echo "❌ Token Salah!"; exit 1; fi
     
-    echo "✅ Koneksi Sukses! Menunggu Pairing di Telegram..."
-    echo "👉 Kode Unit Anda: $UNIT"
+    echo "Menunggu Pairing... Kode: $UNIT"
     OFFSET=0
     while true; do
         R=$(curl -s "https://api.telegram.org/bot$INPUT_BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
