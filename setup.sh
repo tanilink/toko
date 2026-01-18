@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (STABLE LOOP FIX)
-# Fitur: Staff UI + Anti-Loop Restart & Update
+# 🛡️ KASIRLITE REMOTE v4.9 - GOLD EDITION (FINAL STABLE)
+# Fitur: Multi-User, Broadcast, Anti-Loop, Zero-Drama Install
 # ==========================================================
 
 # --- [KONFIGURASI PUSAT] ---
@@ -16,6 +16,7 @@ SERVICE_FILE="$DIR_UTAMA/service_bot.sh"
 FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 pasang_cronjob() {
+    # Cek & Pasang Cronjob (Auto Restart 09:00)
     if ! pkg list-installed 2>/dev/null | grep -q "cronie"; then
         pkg install cronie termux-services -y >/dev/null 2>&1
         sv-enable crond >/dev/null 2>&1
@@ -25,14 +26,15 @@ pasang_cronjob() {
 }
 
 update_system_files() {
-    echo "🛡️ Menerapkan Patch Anti-Loop..."
+    echo "🛡️ Menerapkan Sistem Gold..."
     pasang_cronjob
 
     # ==========================================
-    # 1. SERVICE BOT (PATCHED)
+    # 1. SERVICE BOT (LOGIKA LENGKAP)
     # ==========================================
     cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
+# Pastikan Config terbaca dengan path absolut
 CONFIG_FILE="$HOME/.kasirlite/config.conf"
 source "$CONFIG_FILE"
 
@@ -47,28 +49,36 @@ kirim_pesan() {
     local TEXT=$2
     local MODE_KEYBOARD=$3 
     
+    # 1. KEYBOARD OWNER (Full Akses)
     if [ "$MODE_KEYBOARD" == "MAIN_OWNER" ]; then
         KEYBOARD='{"keyboard":[
         [{"text":"📊 Cek Status"},{"text":"📦 Backup DB"}],
         [{"text":"🟢 Buka Toko"},{"text":"🔴 Tutup Toko"}],
         [{"text":"🔄 Restart Service"},{"text":"⬇️ Update Sistem"}],
-        [{"text":"➕ Manajemen Staff"},{"text":"🔐 Ganti Password"}]
+        [{"text":"➕ Manajemen Staff"},{"text":"📢 Pesan ke Staff"}],
+        [{"text":"🔐 Ganti Password"}]
         ],"resize_keyboard":true,"is_persistent":true}'
+    
+    # 2. KEYBOARD STAFF (Terbatas)
     elif [ "$MODE_KEYBOARD" == "MAIN_STAFF" ]; then
         KEYBOARD='{"keyboard":[
         [{"text":"📊 Cek Status"},{"text":"📦 Backup DB"}],
         [{"text":"🔄 Restart Service"}]
         ],"resize_keyboard":true,"is_persistent":true}'
+    
+    # 3. SUB-MENU STAFF
     elif [ "$MODE_KEYBOARD" == "SUB_STAFF" ]; then
         KEYBOARD='{"keyboard":[
         [{"text":"✏️ Ganti Staff"},{"text":"🗑️ Hapus Staff"}],
         [{"text":"🔙 Kembali ke Menu Utama"}]
         ],"resize_keyboard":true,"is_persistent":true}'
+        
     else
         curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
             -d chat_id="$TARGET_ID" -d text="$TEXT" -d parse_mode="HTML" >/dev/null
         return
     fi
+
     curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
         -d chat_id="$TARGET_ID" -d text="$TEXT" -d parse_mode="HTML" -d reply_markup="$KEYBOARD" >/dev/null
 }
@@ -89,30 +99,34 @@ kirim_backup_zip() {
 }
 
 curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/deleteMyCommands" >/dev/null
-kirim_pesan "$ADMIN_ID" "✅ <b>$NAMA_TOKO ONLINE</b>%0ASistem Stabil (Loop Fixed)." "MAIN_OWNER"
+kirim_pesan "$ADMIN_ID" "✅ <b>$NAMA_TOKO ONLINE</b>%0ASistem Siap (v4.9 Gold)." "MAIN_OWNER"
 
 while true; do
     RAW_UPDATES=$(curl -s -m 10 "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
 
     if [[ "$RAW_UPDATES" == *'"ok":true'* ]]; then
+        # Sanitasi JSON (Hapus newline dan kutip ganda pada pesan)
         PARSED_DATA=$(echo "$RAW_UPDATES" | jq -r '.result[] | "\(.update_id)|\(.message.from.id)|\(.message.text | gsub("\n"; " ") | gsub("\""; ""))"')
         
         if [ ! -z "$PARSED_DATA" ]; then
             while IFS='|' read -r UPDATE_ID SENDER_ID MSG_TEXT; do
                 
-                # IDENTIFIKASI USER
+                # --- [1] IDENTIFIKASI KASTA USER ---
                 IS_OWNER=false; IS_STAFF=false
                 if [ "$SENDER_ID" == "$ADMIN_ID" ]; then IS_OWNER=true;
                 elif [ "$SENDER_ID" == "$STAFF_ID" ]; then IS_STAFF=true;
-                else OFFSET=$UPDATE_ID; continue; fi
+                else OFFSET=$UPDATE_ID; continue; fi # Abaikan Orang Asing
 
-                # LOGIKA PERINTAH
+                # --- [2] LOGIKA PERINTAH ---
+                
+                # === A. FITUR UMUM (SEMUA BISA) ===
                 if [[ "$MSG_TEXT" == "📊 Cek Status"* ]] || [[ "$MSG_TEXT" == "/status"* ]]; then
                     if pgrep -f cloudflared >/dev/null; then CF="✅ ON"; else CF="❌ OFF"; fi
                     if [ -f "$FLAG_TUTUP" ]; then MODE="🔴 DITUTUP"; else MODE="🟢 DIBUKA"; fi
                     WEB_STAT=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7575)
                     if [ "$WEB_STAT" == "200" ]; then WEB="✅ READY"; else WEB="⚠️ MATI"; fi
                     INFO="📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A📱 App: $WEB%0A🔐 Mode: $MODE"
+                    
                     if [ "$IS_OWNER" == "true" ]; then K_TYPE="MAIN_OWNER"; else K_TYPE="MAIN_STAFF"; fi
                     kirim_pesan "$SENDER_ID" "$INFO" "$K_TYPE"
                 fi
@@ -121,9 +135,9 @@ while true; do
                     kirim_backup_zip "$SENDER_ID" "Remote Backup"
                 fi
                 
-                # --- [FIXED] RESTART DENGAN ANTI-LOOP ---
                 if [[ "$MSG_TEXT" == "🔄 Restart Service"* ]]; then
                     BOLEH=true
+                    # Staff kena Cooldown 1 Jam
                     if [ "$IS_OWNER" == "false" ]; then
                         NOW=$(date +%s)
                         [ -f "$LOG_RESTART" ] && LAST=$(cat "$LOG_RESTART") || LAST=0
@@ -132,25 +146,24 @@ while true; do
                             SISA=$(((3600 - DIFF) / 60))
                             kirim_pesan "$SENDER_ID" "⚠️ Tunggu $SISA menit lagi." "MAIN_STAFF"
                             BOLEH=false
-                        else
-                            echo "$NOW" > "$LOG_RESTART"
-                        fi
+                        else echo "$NOW" > "$LOG_RESTART"; fi
                     fi
                     
                     if [ "$BOLEH" == "true" ]; then
                          if [ "$IS_OWNER" == "true" ]; then K_TYPE="MAIN_OWNER"; else K_TYPE="MAIN_STAFF"; fi
                          kirim_pesan "$SENDER_ID" "🔄 <b>RESTARTING...</b>" "$K_TYPE"
                          
-                         # >> OBAT ANTI-LOOP DISINI <<
-                         # Bot 'Makan' pesan dulu (tandai sudah dibaca) baru mati
+                         # >> ANTI-LOOP: Makan pesan update sebelum mati
                          curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((UPDATE_ID+1))" >/dev/null
                          
                          nohup bash "$HOME/.kasirlite/manager.sh" start >/dev/null 2>&1 &
                     fi
                 fi
 
-                # FITUR KHUSUS OWNER
+                # === B. FITUR KHUSUS OWNER ===
                 if [ "$IS_OWNER" == "true" ]; then
+                    
+                    # Buka/Tutup
                     if [[ "$MSG_TEXT" == "🔴 Tutup Toko"* ]]; then
                         touch "$FLAG_TUTUP"; pkill -f cloudflared
                         kirim_pesan "$SENDER_ID" "🔴 <b>TOKO DITUTUP!</b>" "MAIN_OWNER"
@@ -165,23 +178,21 @@ while true; do
                         fi
                     fi
                     
-                    # --- [FIXED] UPDATE DENGAN ANTI-LOOP ---
+                    # Update & Password
                     if [[ "$MSG_TEXT" == "⬇️ Update Sistem"* ]]; then
                          kirim_pesan "$SENDER_ID" "⬇️ <b>FORCE UPDATE...</b>" "MAIN_OWNER"
-                         
-                         # >> OBAT ANTI-LOOP DISINI <<
                          curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((UPDATE_ID+1))" >/dev/null
-                         
                          curl -sL "$GITHUB_URL" > "$HOME/update_temp.sh"
                          bash "$HOME/update_temp.sh" mode_update
                     fi
-                    
                     if [[ "$MSG_TEXT" == "🔐 Ganti Password"* ]]; then kirim_pesan "$SENDER_ID" "ℹ️ Balas: <code>/set_password 123456</code>" "MAIN_OWNER"; fi
                     if [[ "$MSG_TEXT" == "/set_password"* ]]; then
                         NEW_P=$(echo "$MSG_TEXT" | awk '{print $2}')
                         sed -i "s|^MENU_PASSWORD=.*|MENU_PASSWORD=\"$NEW_P\"|" "$CONFIG_FILE"
                         kirim_pesan "$SENDER_ID" "✅ Pass diganti: $NEW_P" "MAIN_OWNER"
                     fi
+
+                    # Manajemen Staff
                     if [[ "$MSG_TEXT" == "➕ Manajemen Staff"* ]]; then
                         CURR_STAFF=$(grep "STAFF_ID=" "$CONFIG_FILE" | cut -d'"' -f2)
                         if [ -z "$CURR_STAFF" ]; then INFO_S="❌ <b>KOSONG</b>"; else INFO_S="👤 ID: <code>$CURR_STAFF</code>"; fi
@@ -199,11 +210,21 @@ while true; do
                     fi
                     if [[ "$MSG_TEXT" == "/add_staff"* ]]; then
                         NEW_STAFF=$(echo "$MSG_TEXT" | awk '{print $2}')
-                        if [ -z "$NEW_STAFF" ]; then
-                             kirim_pesan "$SENDER_ID" "❌ Error." "SUB_STAFF"
+                        [ -z "$NEW_STAFF" ] && kirim_pesan "$SENDER_ID" "❌ Error." "SUB_STAFF" || { sed -i "s|^STAFF_ID=.*|STAFF_ID=\"$NEW_STAFF\"|" "$CONFIG_FILE"; kirim_pesan "$SENDER_ID" "✅ <b>STAFF DISIMPAN!</b>%0AID: <code>$NEW_STAFF</code>" "SUB_STAFF"; }
+                    fi
+
+                    # Broadcast
+                    if [[ "$MSG_TEXT" == "📢 Pesan ke Staff"* ]]; then
+                        kirim_pesan "$SENDER_ID" "ℹ️ Balas: <code>/say Isi Pesan...</code>" "MAIN_OWNER"
+                    fi
+                    if [[ "$MSG_TEXT" == "/say"* ]]; then
+                        PESAN_ISI=$(echo "$MSG_TEXT" | cut -d' ' -f2-)
+                        TARGET_STAFF=$(grep "STAFF_ID=" "$CONFIG_FILE" | cut -d'"' -f2)
+                        if [ -z "$TARGET_STAFF" ]; then
+                            kirim_pesan "$SENDER_ID" "❌ Belum ada staff." "MAIN_OWNER"
                         else
-                             sed -i "s|^STAFF_ID=.*|STAFF_ID=\"$NEW_STAFF\"|" "$CONFIG_FILE"
-                             kirim_pesan "$SENDER_ID" "✅ <b>STAFF DISIMPAN!</b>%0AID: <code>$NEW_STAFF</code>" "SUB_STAFF"
+                            kirim_pesan "$TARGET_STAFF" "🔔 <b>PESAN DARI OWNER:</b>%0A%0A$PESAN_ISI" "MAIN_STAFF"
+                            kirim_pesan "$SENDER_ID" "✅ Terkirim." "MAIN_OWNER"
                         fi
                     fi
                 fi
@@ -218,7 +239,7 @@ EOF
     chmod +x "$SERVICE_FILE"
 
     # ==========================================
-    # 2. MANAGER SCRIPT
+    # 2. MANAGER SCRIPT (START/STOP)
     # ==========================================
     cat << 'EOF' > "$MANAGER_FILE"
 #!/bin/bash
@@ -233,9 +254,11 @@ jalankan_layanan() {
     termux-wake-lock
     pkill -f "cloudflared"
     pkill -f "service_bot.sh"
+    # Logika Kunci Toko (Tunnel)
     if [ -f "$FLAG_TUTUP" ]; then echo "🔒 TOKO DITUTUP."; else 
         [ -n "$TUNNEL_TOKEN" ] && nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
     fi
+    # Bot Selalu Nyala
     nohup bash "$SERVICE_FILE" >/dev/null 2>&1 &
     echo "✅ Bot Started."
 }
@@ -258,7 +281,7 @@ tampilkan_menu() {
     while true; do
         clear
         echo "=== KASIRLITE v4.9: $NAMA_TOKO ==="
-        echo "   [ PLATINUM EDITION ]"
+        echo "   [ GOLD EDITION ]"
         if [ -f "$FLAG_TUTUP" ]; then echo "[ STATUS: 🔴 CLOSED ]"; else echo "[ STATUS: 🟢 OPEN ]"; fi
         echo "--------------------------------"
         echo "1. Cek Status Web Local"
@@ -283,15 +306,18 @@ EOF
 }
 
 # ==========================================
-# 3. INSTALLER & UPDATER (FIXED)
+# 3. INSTALLER & UPDATER (THE ZERO DRAMA ENGINE)
 # ==========================================
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
     termux-wake-lock
+    
+    # [SELF HEALING] Inject Variabel Baru Jika Tidak Ada
     if ! grep -q "MENU_PASSWORD" "$CONFIG_FILE"; then echo 'MENU_PASSWORD="123456"' >> "$CONFIG_FILE"; fi
     if ! grep -q "ADMIN_ID" "$CONFIG_FILE"; then echo "ADMIN_ID=\"$CHAT_ID\"" >> "$CONFIG_FILE"; fi
     if ! grep -q "STAFF_ID" "$CONFIG_FILE"; then echo 'STAFF_ID=""' >> "$CONFIG_FILE"; fi
 
+    # [ANTI DRAMA] Pastikan Dependencies Ada
     pkg update -y >/dev/null 2>&1
     pkg install -y cloudflared curl jq zip cronie termux-services >/dev/null 2>&1
     
@@ -302,11 +328,16 @@ if [ "$1" == "mode_update" ]; then
     rm "$HOME/update_temp.sh" 2>/dev/null
     exit 0
 else
-    # INSTALL BARU
-    clear; echo "   🛡️ KASIRLITE v4.9 PLATINUM   "
+    # --- INSTALL BARU (ZERO DRAMA) ---
+    clear; echo "   🛡️ KASIRLITE v4.9 GOLD   "
+    
+    # FIX INPUT: Paksa baca TTY agar tidak skip
     read -p "👉 Tempel TOKEN BOT: " INPUT_BOT_TOKEN < /dev/tty
     
-    echo ""; echo "⏳ MEMPROSES SYSTEM... (JANGAN DITUTUP!)"
+    # VISUAL FEEDBACK: Agar user tidak panik saat loading
+    echo ""; echo "⏳ SEDANG DOWNLOAD SYSTEM... (JANGAN DICANCEL!)"
+    echo "   Estimasi: 1-3 Menit (Tergantung Internet)"
+    
     [ -z "$INPUT_BOT_TOKEN" ] && echo "❌ Token Kosong!" && exit 1
     
     termux-wake-lock
@@ -318,9 +349,9 @@ else
     MSG="🔔 <b>PAIRING BARU</b>%0AKode: <code>$UNIT</code>%0A%0AReply: <code>/deploy $UNIT [TOKEN_CF] [NAMA]</code>"
     
     CEK=$(curl -s -X POST "https://api.telegram.org/bot$INPUT_BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML")
-    if [[ "$CEK" != *'"ok":true'* ]]; then echo "❌ Token Salah!"; exit 1; fi
+    if [[ "$CEK" != *'"ok":true'* ]]; then echo "❌ Token Salah / Koneksi Gagal!"; exit 1; fi
     
-    echo "Menunggu Pairing... Kode: $UNIT"
+    echo "✅ Koneksi Sukses! Menunggu Pairing di Telegram..."
     OFFSET=0
     while true; do
         R=$(curl -s "https://api.telegram.org/bot$INPUT_BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
@@ -347,6 +378,12 @@ MENU_PASSWORD="123456"
 GITHUB_URL="$GITHUB_URL"
 EOF
     update_system_files
+    
+    # FIX SHORTCUT: Agar bisa langsung ketik 'menu'
+    if ! grep -q "alias menu=" ~/.bashrc; then 
+        echo "alias menu='bash $HOME/.kasirlite/manager.sh'" >> ~/.bashrc
+    fi
     source ~/.bashrc 2>/dev/null || true
+    
     bash "$MANAGER_FILE" start
 fi
