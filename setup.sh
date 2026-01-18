@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (INSTALLER FIX)
-# Fitur: Staff UI + Fix Input Token (Anti-Skip)
+# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (LOADING FIX)
+# Fitur: Staff UI + Indikator Loading Jelas
 # ==========================================================
 
 # --- [KONFIGURASI PUSAT] ---
@@ -288,7 +288,7 @@ EOF
 }
 
 # ==========================================
-# 3. INSTALLER & UPDATER (FIXED)
+# 3. INSTALLER & UPDATER
 # ==========================================
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
@@ -307,11 +307,14 @@ if [ "$1" == "mode_update" ]; then
     rm "$HOME/update_temp.sh" 2>/dev/null
     exit 0
 else
-    # INSTALL BARU (FIXED: TAMBAH < /dev/tty)
+    # INSTALL BARU
     clear; echo "   🛡️ KASIRLITE v4.9 PLATINUM   "
-    
-    # PERBAIKAN UTAMA ADA DI BARIS INI:
     read -p "👉 Tempel TOKEN BOT: " INPUT_BOT_TOKEN < /dev/tty
+    
+    echo ""
+    echo "⏳ MEMPROSES SYSTEM... (JANGAN DITUTUP!)"
+    echo "   Sambil menunggu, seruput kopinya dulu ☕"
+    echo "   (Proses download bisa memakan waktu 2-3 menit)"
     
     [ -z "$INPUT_BOT_TOKEN" ] && echo "❌ Token Kosong!" && exit 1
     
@@ -326,7 +329,8 @@ else
     CEK=$(curl -s -X POST "https://api.telegram.org/bot$INPUT_BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML")
     if [[ "$CEK" != *'"ok":true'* ]]; then echo "❌ Token Salah!"; exit 1; fi
     
-    echo "Menunggu Pairing... Kode: $UNIT"
+    echo "✅ Koneksi Sukses! Menunggu Pairing di Telegram..."
+    echo "👉 Kode Unit Anda: $UNIT"
     OFFSET=0
     while true; do
         R=$(curl -s "https://api.telegram.org/bot$INPUT_BOT_TOKEN/getUpdates?offset=$((OFFSET+1))")
