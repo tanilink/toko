@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (STAFF UI)
-# Fitur: Sub-Menu Manajemen Staff (Ganti/Hapus)
+# 🛡️ KASIRLITE REMOTE v4.9 - PLATINUM (INSTALLER FIX)
+# Fitur: Staff UI + Fix Input Token (Anti-Skip)
 # ==========================================================
 
 # --- [KONFIGURASI PUSAT] ---
@@ -25,11 +25,11 @@ pasang_cronjob() {
 }
 
 update_system_files() {
-    echo "🛡️ Menerapkan Staff UI..."
+    echo "🛡️ Menerapkan Sistem Platinum..."
     pasang_cronjob
 
     # ==========================================
-    # 1. SERVICE BOT (DENGAN SUB-MENU STAFF)
+    # 1. SERVICE BOT (STAFF UI)
     # ==========================================
     cat << 'EOF' > "$SERVICE_FILE"
 #!/bin/bash
@@ -70,9 +70,7 @@ kirim_pesan() {
         [{"text":"🔙 Kembali ke Menu Utama"}]
         ],"resize_keyboard":true,"is_persistent":true}'
         
-    # DEFAULT: Tanpa Keyboard Khusus (Pakai yang terakhir)
     else
-        # Kirim tanpa mengubah keyboard (opsional)
         curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
             -d chat_id="$TARGET_ID" -d text="$TEXT" -d parse_mode="HTML" >/dev/null
         return
@@ -116,7 +114,7 @@ while true; do
                 IS_OWNER=false; IS_STAFF=false
                 if [ "$SENDER_ID" == "$ADMIN_ID" ]; then IS_OWNER=true;
                 elif [ "$SENDER_ID" == "$STAFF_ID" ]; then IS_STAFF=true;
-                else OFFSET=$UPDATE_ID; continue; fi # Abaikan Orang Asing
+                else OFFSET=$UPDATE_ID; continue; fi
 
                 # --- [2] LOGIKA PERINTAH ---
                 
@@ -128,7 +126,6 @@ while true; do
                     if [ "$WEB_STAT" == "200" ]; then WEB="✅ READY"; else WEB="⚠️ MATI"; fi
                     INFO="📊 <b>STATUS $NAMA_TOKO</b>%0A☁️ Tunnel: $CF%0A📱 App: $WEB%0A🔐 Mode: $MODE"
                     
-                    # Tentukan Keyboard Balasan
                     if [ "$IS_OWNER" == "true" ]; then K_TYPE="MAIN_OWNER"; else K_TYPE="MAIN_STAFF"; fi
                     kirim_pesan "$SENDER_ID" "$INFO" "$K_TYPE"
                 fi
@@ -138,7 +135,6 @@ while true; do
                 fi
                 
                 if [[ "$MSG_TEXT" == "🔄 Restart Service"* ]]; then
-                    # Logika Cooldown Staff
                     BOLEH=true
                     if [ "$IS_OWNER" == "false" ]; then
                         NOW=$(date +%s)
@@ -163,7 +159,6 @@ while true; do
                 # === FITUR KHUSUS OWNER ===
                 if [ "$IS_OWNER" == "true" ]; then
                 
-                    # --> BUKA TUTUP
                     if [[ "$MSG_TEXT" == "🔴 Tutup Toko"* ]]; then
                         touch "$FLAG_TUTUP"; pkill -f cloudflared
                         kirim_pesan "$SENDER_ID" "🔴 <b>TOKO DITUTUP!</b>" "MAIN_OWNER"
@@ -178,7 +173,6 @@ while true; do
                         fi
                     fi
                     
-                    # --> UPDATE & PASS
                     if [[ "$MSG_TEXT" == "⬇️ Update Sistem"* ]]; then
                          kirim_pesan "$SENDER_ID" "⬇️ <b>FORCE UPDATE...</b>" "MAIN_OWNER"
                          curl -s "https://api.telegram.org/bot$BOT_TOKEN/getUpdates?offset=$((UPDATE_ID+1))" >/dev/null
@@ -192,37 +186,26 @@ while true; do
                         kirim_pesan "$SENDER_ID" "✅ Pass diganti: $NEW_P" "MAIN_OWNER"
                     fi
 
-                    # --> [FITUR BARU] MANAJEMEN STAFF (SUB-MENU)
-                    
-                    # 1. Masuk Menu Staff
+                    # MANAJEMEN STAFF
                     if [[ "$MSG_TEXT" == "➕ Manajemen Staff"* ]]; then
                         CURR_STAFF=$(grep "STAFF_ID=" "$CONFIG_FILE" | cut -d'"' -f2)
-                        if [ -z "$CURR_STAFF" ]; then INFO_S="❌ <b>KOSONG</b> (Belum ada staff)"; else INFO_S="👤 ID: <code>$CURR_STAFF</code>"; fi
-                        
-                        kirim_pesan "$SENDER_ID" "👥 <b>MANAJEMEN STAFF</b>%0A%0A$INFO_S%0A%0ASilakan pilih tindakan:" "SUB_STAFF"
+                        if [ -z "$CURR_STAFF" ]; then INFO_S="❌ <b>KOSONG</b>"; else INFO_S="👤 ID: <code>$CURR_STAFF</code>"; fi
+                        kirim_pesan "$SENDER_ID" "👥 <b>MANAJEMEN STAFF</b>%0A%0A$INFO_S" "SUB_STAFF"
                     fi
-                    
-                    # 2. Tombol Kembali
                     if [[ "$MSG_TEXT" == "🔙 Kembali ke Menu Utama"* ]]; then
-                        kirim_pesan "$SENDER_ID" "🔙 Kembali ke Menu Utama." "MAIN_OWNER"
+                        kirim_pesan "$SENDER_ID" "🔙 Kembali." "MAIN_OWNER"
                     fi
-                    
-                    # 3. Tombol Hapus
                     if [[ "$MSG_TEXT" == "🗑️ Hapus Staff"* ]]; then
                         sed -i "s|^STAFF_ID=.*|STAFF_ID=\"\"|" "$CONFIG_FILE"
-                        kirim_pesan "$SENDER_ID" "🗑️ <b>STAFF DIHAPUS!</b>%0AAkses staff dicabut." "SUB_STAFF"
+                        kirim_pesan "$SENDER_ID" "🗑️ <b>STAFF DIHAPUS!</b>" "SUB_STAFF"
                     fi
-                    
-                    # 4. Tombol Ganti (Instruksi)
                     if [[ "$MSG_TEXT" == "✏️ Ganti Staff"* ]]; then
-                        kirim_pesan "$SENDER_ID" "ℹ️ Balas dengan format:%0A<code>/add_staff ID_BARU</code>" "SUB_STAFF"
+                        kirim_pesan "$SENDER_ID" "ℹ️ Balas: <code>/add_staff ID_BARU</code>" "SUB_STAFF"
                     fi
-                    
-                    # 5. Eksekusi Ganti
                     if [[ "$MSG_TEXT" == "/add_staff"* ]]; then
                         NEW_STAFF=$(echo "$MSG_TEXT" | awk '{print $2}')
                         if [ -z "$NEW_STAFF" ]; then
-                             kirim_pesan "$SENDER_ID" "❌ ID tidak boleh kosong." "SUB_STAFF"
+                             kirim_pesan "$SENDER_ID" "❌ Error." "SUB_STAFF"
                         else
                              sed -i "s|^STAFF_ID=.*|STAFF_ID=\"$NEW_STAFF\"|" "$CONFIG_FILE"
                              kirim_pesan "$SENDER_ID" "✅ <b>STAFF DISIMPAN!</b>%0AID: <code>$NEW_STAFF</code>" "SUB_STAFF"
@@ -251,22 +234,15 @@ FLAG_TUTUP="$DIR_UTAMA/.toko_tutup"
 
 jalankan_layanan() {
     source "$CONFIG_FILE"
-    echo "🚀 Menyalakan $NAMA_TOKO (v4.9 Platinum)..."
+    echo "🚀 Menyalakan $NAMA_TOKO..."
     termux-wake-lock
     pkill -f "cloudflared"
     pkill -f "service_bot.sh"
-    
-    if [ -f "$FLAG_TUTUP" ]; then
-        echo "🔒 STATUS: TOKO DITUTUP (TUNNEL OFF)."
-    else
-        if [ -n "$TUNNEL_TOKEN" ]; then 
-            nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
-            echo "☁️ Tunnel: AKTIF"
-        fi
+    if [ -f "$FLAG_TUTUP" ]; then echo "🔒 TOKO DITUTUP."; else 
+        [ -n "$TUNNEL_TOKEN" ] && nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" >/dev/null 2>&1 &
     fi
-    
     nohup bash "$SERVICE_FILE" >/dev/null 2>&1 &
-    echo "✅ Bot Service Started."
+    echo "✅ Bot Started."
 }
 
 ganti_token_darurat() {
@@ -274,14 +250,12 @@ ganti_token_darurat() {
     echo ""; echo "🔒 FITUR TERKUNCI"; read -p "🔑 Masukkan Password Admin: " INPUT_PASS
     if [ "$INPUT_PASS" != "$PASS_SAAT_INI" ]; then echo "❌ PASSWORD SALAH!"; sleep 2; return; fi
     
-    echo ""; echo "⚠️  MODE DARURAT: GANTI BOT ⚠️"
-    read -p "👉 Tempel Token Bot BARU: " NEW_TOKEN
+    echo ""; echo "⚠️  MODE DARURAT ⚠️"
+    read -p "👉 Tempel Token BARU: " NEW_TOKEN
     if [[ "$NEW_TOKEN" != *":"* ]]; then echo "❌ Token Salah!"; return; fi
 
     sed -i "s|BOT_TOKEN=.*|BOT_TOKEN=\"$NEW_TOKEN\"|" "$CONFIG_FILE"
-    echo "✅ Disimpan! Restarting..."
-    jalankan_layanan
-    echo "✅ Selesai."; read -p "Enter..."
+    echo "✅ Disimpan!"; jalankan_layanan; echo "✅ Selesai."; read -p "Enter..."
 }
 
 tampilkan_menu() {
@@ -314,13 +288,11 @@ EOF
 }
 
 # ==========================================
-# 3. INSTALLER & UPDATER
+# 3. INSTALLER & UPDATER (FIXED)
 # ==========================================
 if [ "$1" == "mode_update" ]; then
     source "$CONFIG_FILE"
     termux-wake-lock
-    
-    # Auto-Add Variable
     if ! grep -q "MENU_PASSWORD" "$CONFIG_FILE"; then echo 'MENU_PASSWORD="123456"' >> "$CONFIG_FILE"; fi
     if ! grep -q "ADMIN_ID" "$CONFIG_FILE"; then echo "ADMIN_ID=\"$CHAT_ID\"" >> "$CONFIG_FILE"; fi
     if ! grep -q "STAFF_ID" "$CONFIG_FILE"; then echo 'STAFF_ID=""' >> "$CONFIG_FILE"; fi
@@ -331,14 +303,17 @@ if [ "$1" == "mode_update" ]; then
     source ~/.bashrc 2>/dev/null || true
     update_system_files
     bash "$MANAGER_FILE" start
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE UI SUKSES!</b>%0AStaff Menu Ready." -d parse_mode="HTML" >/dev/null
+    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id="$CHAT_ID" -d text="✅ <b>UPDATE SUKSES!</b>" -d parse_mode="HTML" >/dev/null
     rm "$HOME/update_temp.sh" 2>/dev/null
     exit 0
 else
-    # INSTALL BARU
+    # INSTALL BARU (FIXED: TAMBAH < /dev/tty)
     clear; echo "   🛡️ KASIRLITE v4.9 PLATINUM   "
-    read -p "👉 Tempel TOKEN BOT: " INPUT_BOT_TOKEN
-    [ -z "$INPUT_BOT_TOKEN" ] && exit 1
+    
+    # PERBAIKAN UTAMA ADA DI BARIS INI:
+    read -p "👉 Tempel TOKEN BOT: " INPUT_BOT_TOKEN < /dev/tty
+    
+    [ -z "$INPUT_BOT_TOKEN" ] && echo "❌ Token Kosong!" && exit 1
     
     termux-wake-lock
     pkg update -y >/dev/null 2>&1 && pkg install -y cloudflared curl jq zip cronie termux-services >/dev/null 2>&1
